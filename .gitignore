@@ -4,3 +4,14 @@ build-*
 custom.pri
 env.pri
 cmake/CustomSteps.cmake
+
+# HarmonyOS
+*.p12
+*.cer
+*.p7b
+*.csr
+.hvigor/
+oh_modules/
+build/
+.cxx/
+local.properties
