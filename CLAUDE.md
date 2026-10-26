@@ -42,7 +42,8 @@
 | S4 | ArkUI 界面 MVP | 打开文件、视图操作、模型树、剖切、基础测量 |
 | S5 | 一多适配 + 上架 | PC / 平板 / 手机均可运行 |
 
-**当前阶段：S1**
+**当前阶段：S2**（S1 已于 2026-10-26 完成：`D:\harmony\OcctProbe` 在 MateBook 上读取 `screw.step` 成功，
+1 个实体、10 个面、包围盒 20.001 × 20.001 × 42.300，耗时 21.9 ms）
 
 ## 目录约定
 
@@ -104,3 +105,15 @@
 - **解决**：路径检查之后改成 `$ErrorActionPreference = "Continue"`，原生命令是否成功只看 `$LASTEXITCODE`。
   输出用 `2>&1 | Log` 同时写进日志（见 `scripts/harmony/build_*.ps1`）。
   另外，`powershell -ExecutionPolicy Bypass -File ...` 会被 Claude Code 的安全策略拦截，要在当前会话里用 `& script.ps1` 调用。
+
+### 4. 应用和 OCCT 必须用同一份 libc++（S1c）
+- **现象**：模板工程 `build-profile.json5` 设了 `"nativeCompiler": "BiSheng"`，打包进 HAP 的是
+  `hms/native/BiSheng/.../libc++_shared.so`；而 OCCT 是用 SDK 的 `openharmony/native/llvm` 编译的，两份 libc++ 不一样（md5 不同）。
+- **解决**：删掉 `nativeCompiler: BiSheng`，用默认编译器，并把 `openharmony/native/llvm/lib/aarch64-linux-ohos/libc++_shared.so`
+  放进 `entry/libs/arm64-v8a`。预构建 OCCT 库只有 arm64，`abiFilters` 只保留 `arm64-v8a`。
+- 另外，Hvigor 默认的 C++ 标准低于 C++17：`std::string::data()` 返回 const，原始报错
+  `error: no matching function for call to 'napi_get_value_string_utf8' ... would lose const qualifier`，改用 `&str[0]`。
+
+### 5. `devecocli log --keyword` 读不到日志
+- `devecocli log --keyword OCCT_PROBE --from 2m` 没有输出任何日志行。用 `hdc -t <设备> shell "hilog -x -T OCCT_PROBE"` 直接读。
+- 点击按钮可以用 `devecocli ui click --device <设备> --id <组件 id>`（ArkUI 组件要先设 `.id(...)`）。
