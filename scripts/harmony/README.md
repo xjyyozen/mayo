@@ -6,7 +6,7 @@
 | 文件 | 用途 |
 |---|---|
 | `build_freetype.ps1` | 编译 FreeType（静态库 `libfreetype.a`） |
-| `build_occt.ps1` | 编译 OCCT（动态库 `libTK*.so`，GLES 版） |
+| `build_occt.ps1` | 编译 OCCT（动态库 `libTK*.so`，GLES 版，带 RapidJSON 以支持读取 glTF） |
 | `patches/occt.patch` | 让 OCCT 支持 OHOS 平台的补丁（4 处修改，原因见下文） |
 
 这些文件是 `D:\harmony\deps\` 下同名文件的副本。修改其中一份后，记得同步另一份。
@@ -17,6 +17,7 @@
 |---|---|---|
 | FreeType | **2.13.x**（当前 2.13.3） | <https://download.savannah.gnu.org/releases/freetype/> |
 | OCCT | **7.9.3**（tag `V7_9_3`，提交 `a016080b`） | <https://github.com/Open-Cascade-SAS/OCCT> |
+| RapidJSON | master 提交 **`24b5e7a8`**（2025-02-05；只有头文件，不用编译） | <https://github.com/Tencent/rapidjson> |
 | HarmonyOS SDK | API 26.0.0，CMake 3.28.2，Ninja 1.13.2，Clang 15.0.4 | `D:\DevEco Studio\sdk\default\openharmony\native` |
 
 ## 目录约定
@@ -25,6 +26,7 @@
 D:\harmony\deps\
   src\freetype-2.13.3\        FreeType 源码
   src\OCCT-7_9_3\             OCCT 源码（git clone）
+  src\rapidjson\              RapidJSON 源码（git clone，只用其中的 include\）
   patches\occt.patch          OCCT 补丁
   build\<name>-<ver>-<arch>\  构建目录
   install\arm64-v8a\          安装目录（include\、lib\）
@@ -39,6 +41,9 @@ D:\harmony\deps\
 # 1. 获取源码（只需一次）
 #    FreeType：下载 freetype-2.13.3.tar.xz，解压到 D:\harmony\deps\src\
 git clone --depth 1 --branch V7_9_3 https://github.com/Open-Cascade-SAS/OCCT.git D:\harmony\deps\src\OCCT-7_9_3
+#    RapidJSON：只有头文件，固定到脚本参数 -RapidJsonCommit 指定的提交（脚本会检查）
+git clone https://github.com/Tencent/rapidjson.git D:\harmony\deps\src\rapidjson
+git -C D:\harmony\deps\src\rapidjson checkout 24b5e7a8b27f42fa16b96fc70aade9106cf7102f
 
 # 2. FreeType（OCCT 依赖它，必须先编）
 & D:\harmony\deps\build_freetype.ps1
@@ -57,6 +62,26 @@ git clone --depth 1 --branch V7_9_3 https://github.com/Open-Cascade-SAS/OCCT.git
 - 头文件：`install\arm64-v8a\include\opencascade\`
 
 OCCT 运行时还需要 SDK 里的 `libc++_shared.so`，打包 HAP 时要一起带上。
+
+## glTF 支持：RapidJSON
+
+OCCT 读 glTF（`RWGltf_CafReader`，在 `TKDEGLTF` / `TKRWMesh` 里）要用 RapidJSON 解析 JSON。
+不开 RapidJSON 时这两个库照样会编出来、链接也不报错，但**运行时读 glTF 直接失败**，
+日志里是 `Error: glTF reader is unavailable - OCCT has been built without RapidJSON support`。
+
+脚本里的相关设置：
+
+- `-DUSE_RAPIDJSON=ON`
+- `-D3RDPARTY_RAPIDJSON_INCLUDE_DIR=D:/harmony/deps/src/rapidjson/include`：直接给出头文件目录。
+  不要只给 `3RDPARTY_RAPIDJSON_DIR` 让 CMake 去找：OHOS 工具链把查找根目录限制在 `CMAKE_FIND_ROOT_PATH`（install 目录）里，
+  `src\rapidjson` 不在其中，可能找不到。
+- RapidJSON 自 v1.1.0（2016 年）以后没有再发版，v1.1.0 在较新的编译器上有已知编译错误，所以固定用 master 的一个提交。
+
+验证方法：`libTKRWMesh.so` 里不应再包含 `built without RapidJSON` 字符串。
+
+> **增量编译说明**：在已有构建目录上直接重新运行脚本（不加 `-Clean`）即可。
+> 但 `HAVE_RAPIDJSON` 是加给所有工程的全局宏，打开它会让几乎全部编译单元重新编译（实测 5480 个，约 6 分钟），
+> 而不是只编 glTF 相关的库。
 
 ## 并行度：`-j 14`
 

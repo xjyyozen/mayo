@@ -48,6 +48,10 @@
   Viewer3D 通过 `add_subdirectory` 引入；设备上用 Mayo IO 系统导入 `screw.step`：文档树 1 个节点、根节点 `the product name`、导入约 20 ms
 - S3b（2026-10-26）：导入的文档由 Mayo 的 GuiDocument 显示在 Viewer3D 的 3D 视图中（替换测试立方体），
   保留 S2 的交互 / ViewCube / 按需重绘 / 头灯；XCAF 颜色生效，无颜色零件为中性灰，显示边线，导入后 FitAll
+- S3c（2026-10-26）：临时"打开"按钮 → DocumentViewPicker（限定 STEP/STP、IGES/IGS、STL、OBJ、BREP、glTF/GLB）→
+  复制到 `cacheDir/import/`（每次打开前清空）→ NAPI 异步任务在后台线程导入，屏幕中央显示"正在加载 xx%"（Mayo 的 TaskProgress），
+  失败时显示通俗原因；新文档显示后关闭并释放旧文档。OCCT 开启 RapidJSON 以支持 glTF。
+  设备实测：38.8 MB 的 PCB STEP（2121 个节点）后台导入 20.3 s，界面不卡；GLB / STL / OBJ / STEP 均可打开
 
 ## 目录约定
 
@@ -185,3 +189,18 @@
   按 Mayo 界面版的做法在 `setEntityPostProcess` 里调 `BRepMeshingUtils::compute`（`src/app/brep_meshing.cpp`，无 Qt，已加进 mayo_core）。
 - **无颜色零件**：`XCAFPrs_AISObject::DefaultStyle()` 默认白色；Viewer3D 用子类覆盖成中性灰（`mayo_session.cpp` 的 `NeutralShapeObjectDriver`）。
 - `snapshot_display -f xxx.png` 不会生成 PNG（只支持 jpeg），要 PNG 就先截 jpeg 再在电脑上转换。
+
+### 13. 后台线程导入 + Picker 文件（S3c）
+- **线程划分**：`GuiApplication` 默认在 `newDocument()` 时当场建 GuiDocument（V3d_View、AIS 上下文），不能放到后台线程。
+  Viewer3D 关掉自动映射（`setAutomaticDocumentMapping(false)`），后台线程只建纯 OCAF 文档并导入（读取 + 转换 + 网格化），
+  回到 UI 线程再调 protected 的 `onDocumentAdded()` 建 GuiDocument（`GuiDocument` 构造时会映射已有实体）。
+  新建 / 关闭文档用同一把锁（`TDocStd_Application` 的文档表不是线程安全的），见 Viewer3D `mayo_session.cpp`。
+- **进度**：`importInDocument` 要传 `TaskProgress`；在后台线程上建一个 `TaskManager`，用 `exec()` 同步执行任务，
+  进度从 `signalProgressChanged` 拿；`setEntityPostProcessInfoProgress(20, ...)` 让网格化占 20%（默认 0，网格化期间进度不动）。
+  经 `napi_threadsafe_function` 回到 UI 线程。
+- **Picker 只给 URI**：ArkTS 侧 `fileIo.open(uri)` 拿 fd，`fileIo.copyFile(fd, cacheDir/import/<文件名>)`，再把路径交给 C++。
+  `.gltf` 引用的外部 `.bin` / 贴图不会一起复制，所以只能打开自包含的 `.glb`（或 bin 内嵌的 .gltf）。
+- **格式识别**：Mayo 按扩展名也会认格式，内容不是 STEP 的 `.step` 文件报的是"读取失败"而不是"格式不支持"。
+- **glTF 要 RapidJSON**：不开时 TKDEGLTF 照样编出来，运行时报 `glTF reader is unavailable - OCCT has been built without RapidJSON support`。
+  开启方法见 `scripts/harmony/README.md`；`HAVE_RAPIDJSON` 是全局宏，打开后几乎全量重编。
+- 在 Picker 里自动点选文件时，"安全访问文件"提示条会让列表整体下移，点之前先截图确认坐标。

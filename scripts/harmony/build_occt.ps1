@@ -11,9 +11,17 @@
 #   - FreeType installed to <DepsRoot>\install\<Arch> (build_freetype.ps1)
 #   - OCCT source at <DepsRoot>\src\OCCT-<Tag>, cloned from https://github.com/Open-Cascade-SAS/OCCT
 #   - OHOS patch applied: git -C <src> apply <DepsRoot>\patches\occt.patch (done automatically below)
+#   - RapidJSON (header-only, enables the glTF reader RWGltf_CafReader) at <DepsRoot>\src\rapidjson:
+#       git clone https://github.com/Tencent/rapidjson.git <DepsRoot>\src\rapidjson
+#       git -C <DepsRoot>\src\rapidjson checkout <RapidJsonCommit>
+#     Without it OCCT still builds TKDEGLTF, but reading glTF fails at runtime.
+#
+# Re-running without -Clean is incremental: only the toolkits affected by changed options are rebuilt.
 
 param(
     [string]$Tag       = "7_9_3",
+    # RapidJSON has had no release since v1.1.0 (2016); pin a master commit instead
+    [string]$RapidJsonCommit = "24b5e7a8b27f42fa16b96fc70aade9106cf7102f",
     [string]$Arch      = "arm64-v8a",
     [int]   $Jobs      = 14,
     [string]$DepsRoot  = "D:\harmony\deps",
@@ -30,9 +38,15 @@ $srcDir     = Join-Path $DepsRoot "src\OCCT-$Tag"
 $patch      = Join-Path $DepsRoot "patches\occt.patch"
 $buildDir   = Join-Path $DepsRoot "build\occt-$Tag-$Arch"
 $installDir = Join-Path $DepsRoot "install\$Arch"
+$rapidJson  = Join-Path $DepsRoot "src\rapidjson"
 
-foreach ($p in @($cmake, $ninja, $toolchain, $srcDir, $patch, (Join-Path $installDir "lib\libfreetype.a"))) {
+foreach ($p in @($cmake, $ninja, $toolchain, $srcDir, $patch, (Join-Path $installDir "lib\libfreetype.a"),
+                 (Join-Path $rapidJson "include\rapidjson\rapidjson.h"))) {
     if (-not (Test-Path $p)) { throw "Not found: $p" }
+}
+$rjHead = git -C $rapidJson rev-parse HEAD
+if ($rjHead -ne $RapidJsonCommit) {
+    throw "RapidJSON at $rapidJson is $rjHead, expected $RapidJsonCommit (git -C $rapidJson checkout $RapidJsonCommit)"
 }
 
 # Apply the OHOS patch if not applied yet (reverse-check succeeds => already applied)
@@ -104,7 +118,8 @@ $inst = & $fw $installDir
     -DUSE_TBB=OFF `
     -DUSE_VTK=OFF `
     -DUSE_DRACO=OFF `
-    -DUSE_RAPIDJSON=OFF `
+    -DUSE_RAPIDJSON=ON `
+    "-D3RDPARTY_RAPIDJSON_INCLUDE_DIR=$(& $fw (Join-Path $rapidJson 'include'))" `
     -DUSE_EIGEN=OFF 2>&1 | Log
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed ($LASTEXITCODE)" }
 
