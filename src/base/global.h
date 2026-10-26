@@ -9,6 +9,10 @@
 #  define MAYO_OS_WINDOWS
 #elif defined(__APPLE__)
 #  define MAYO_OS_MAC
+// HarmonyOS(OHOS): compiler also predefines __linux__, so must be checked first.
+// No X11 there (EGL + OpenGL ES only), hence MAYO_OS_LINUX is not defined
+#elif defined(__OHOS__)
+#  define MAYO_OS_OHOS
 #elif defined(__linux__) || defined(__linux)
 #  define MAYO_OS_LINUX
 #elif defined(__ANDROID__) || defined(ANDROID)
