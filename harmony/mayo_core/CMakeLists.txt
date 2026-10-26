@@ -99,7 +99,14 @@ file(
     ${MAYO_SRC_DIR}/3rdparty/miniply/miniply.cpp
 )
 
-add_library(mayo_core STATIC ${MayoCore_SourceFiles} ${MayoIO_SourceFiles})
+# Qt-free helpers from src/app, also compiled into mayo-conv by the root CMakeLists.txt.
+# brep_meshing: BRep shapes must be meshed after import, as GraphicsShapeObjectDriver
+# disables auto-triangulation
+set(MayoApp_QtFreeSourceFiles
+    ${MAYO_SRC_DIR}/app/brep_meshing.cpp
+)
+
+add_library(mayo_core STATIC ${MayoCore_SourceFiles} ${MayoIO_SourceFiles} ${MayoApp_QtFreeSourceFiles})
 
 set_target_properties(mayo_core PROPERTIES
     CXX_STANDARD 17
