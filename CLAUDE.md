@@ -156,6 +156,10 @@
 ### 11. OCCT 灯光与交互的几个坑（S2c）
 - 对 `V3d_AmbientLight` 调用 `SetHeadlight()` 会抛 `Standard_ProgramError`，未捕获直接闪退（SIGABRT）；平行光用构造函数参数指定是否头灯。
 - 非 PBR（Phong）着色下**平行光的 `SetIntensity()` 被忽略**（`OpenGl_ShaderManager.cxx`："used by PBR and ignored by old shading model"），要调亮度就改灯光颜色；环境光的强度有效。
-- `V3d_DirectionalLight` 的方向是**光线前进方向**（从灯指向场景）。
+- `V3d_DirectionalLight` 的方向是**光线前进方向**（从灯指向场景）。头灯（构造函数最后一个参数 `true`）的方向按**视图坐标**解释
+  （X 向右、Y 向上、Z 从屏幕指向观察者），非头灯按世界坐标解释。
+- **平行光要用头灯**（CAD 通用做法）：固定在世界坐标里的灯，旋转时总是同样几个面亮、另几个面暗，转到背面一片暗。
+  Viewer3D 现用：环境光强度 0.3；主光头灯方向 `(0.6, -0.6, -1)`（灯在视线左上前方约 30°）；
+  辅光头灯方向 `(-0.7, 0.7, 0.3)`、颜色 0.4 灰（灯在视线右下后方，主光的 40%）。
 - 默认黄铜材质高光强，辅光的反光会让背光面反而最亮；需要看清面的明暗时用哑光材质（如 `Graphic3d_NameOfMaterial_Plastered`）。
 - `AIS_ViewController::HandleViewEvents` 返回前会清零"还要画下一帧"标志，在 `FlushViewEvents` 之后读 `toAskNextFrame()` 永远是 false（ViewCube 动画停在第一帧）；要在重写的 `handleViewRedraw` 里读。
