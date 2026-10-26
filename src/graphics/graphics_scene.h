@@ -108,9 +108,10 @@ public:
     Signal<> signalSelectionModeChanged;
     Signal<const OccHandle<V3d_View>&> signalRedrawRequested;
 
-private:
+    // Underlying AIS context, for frontends driving the view with AIS_ViewController (eg HarmonyOS port)
     AIS_InteractiveContext* aisContextPtr() const;
 
+private:
     class Private;
     Private* const d = nullptr;
 };
