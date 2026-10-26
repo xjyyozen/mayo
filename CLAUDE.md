@@ -46,6 +46,8 @@
 1 个实体、10 个面、包围盒 20.001 × 20.001 × 42.300，耗时 21.9 ms）
 - S3a（2026-10-26）：Mayo 核心（MayoCore + MayoIO 源码，无 Qt）由 `harmony/mayo_core/CMakeLists.txt` 编成静态库 `mayo_core`，
   Viewer3D 通过 `add_subdirectory` 引入；设备上用 Mayo IO 系统导入 `screw.step`：文档树 1 个节点、根节点 `the product name`、导入约 20 ms
+- S3b（2026-10-26）：导入的文档由 Mayo 的 GuiDocument 显示在 Viewer3D 的 3D 视图中（替换测试立方体），
+  保留 S2 的交互 / ViewCube / 按需重绘 / 头灯；XCAF 颜色生效，无颜色零件为中性灰，显示边线，导入后 FitAll
 
 ## 目录约定
 
@@ -169,3 +171,17 @@
   辅光头灯方向 `(-0.7, 0.7, 0.3)`、颜色 0.4 灰（灯在视线右下后方，主光的 40%）。
 - 默认黄铜材质高光强，辅光的反光会让背光面反而最亮；需要看清面的明暗时用哑光材质（如 `Graphic3d_NameOfMaterial_Plastered`）。
 - `AIS_ViewController::HandleViewEvents` 返回前会清零"还要画下一帧"标志，在 `FlushViewEvents` 之后读 `toAskNextFrame()` 永远是 false（ViewCube 动画停在第一帧）；要在重写的 `handleViewRedraw` 里读。
+
+### 12. 用 Mayo 的 GuiDocument 显示模型（S3b）
+- **驱动**：Mayo 新建 `V3d_Viewer` 时通过 `graphicsCreateDriver()` 取驱动，可用 `setFunctionCreateGraphicsDriver()`（定义在
+  `graphics/graphics_create_driver.cpp`，没有头文件，要自己声明）换成我们在 EGL 上下文上建的 `OpenGl_GraphicDriver`。
+  `GuiApplication` 开着自动映射时 `newDocument()` 当场就建 GuiDocument，所以**驱动必须先于任何文档存在**。
+- **视图**：每个 GuiDocument 自带 Viewer / View / AIS 上下文；不用改 Mayo，把我们的 `Aspect_NeutralWindow` + EGL 上下文
+  `SetWindow` 到 `guiDoc->v3dView()` 即可（Mayo 的 Qt 控件也是这样做的）。Mayo 建 Viewer 时调了 `SetDefaultLights()`，
+  GuiDocument 构造时设了自己的背景、左下角 ViewCube 和 `PerfCounters_Extended` 统计采集，都要换掉 / 关掉。
+- **AIS 上下文**：`GraphicsScene::aisContextPtr()` 原本是 private（Qt 界面只走 `highlightAt` / `select`），
+  而 `AIS_ViewController` 必须拿到上下文，已在 harmonyos-port 改为 public。
+- **网格**：`GraphicsShapeObjectDriver` 关掉了自动三角化（`SetAutoTriangulation(false)`），不在导入时网格化就**什么都不显示**；
+  按 Mayo 界面版的做法在 `setEntityPostProcess` 里调 `BRepMeshingUtils::compute`（`src/app/brep_meshing.cpp`，无 Qt，已加进 mayo_core）。
+- **无颜色零件**：`XCAFPrs_AISObject::DefaultStyle()` 默认白色；Viewer3D 用子类覆盖成中性灰（`mayo_session.cpp` 的 `NeutralShapeObjectDriver`）。
+- `snapshot_display -f xxx.png` 不会生成 PNG（只支持 jpeg），要 PNG 就先截 jpeg 再在电脑上转换。
