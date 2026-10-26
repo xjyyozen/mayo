@@ -204,7 +204,7 @@ NCollection_Vec2<int> GraphicsUtils::AspectWindow_size(const OccHandle<Aspect_Wi
 
 OccHandle<Aspect_DisplayConnection> GraphicsUtils::AspectDisplayConnection_create()
 {
-#if (!defined(MAYO_OS_WINDOWS) && (!defined(MAYO_OS_MAC) || defined(MACOSX_USE_GLX)))
+#if (!defined(MAYO_OS_WINDOWS) && !defined(MAYO_OS_OHOS) && (!defined(MAYO_OS_MAC) || defined(MACOSX_USE_GLX)))
     return new Aspect_DisplayConnection(std::getenv("DISPLAY"));
 #else
     return new Aspect_DisplayConnection;
