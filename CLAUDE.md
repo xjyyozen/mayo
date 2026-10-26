@@ -117,3 +117,10 @@
 ### 5. `devecocli log --keyword` 读不到日志
 - `devecocli log --keyword OCCT_PROBE --from 2m` 没有输出任何日志行。用 `hdc -t <设备> shell "hilog -x -T OCCT_PROBE"` 直接读。
 - 点击按钮可以用 `devecocli ui click --device <设备> --id <组件 id>`（ArkUI 组件要先设 `.id(...)`）。
+
+### 6. Git Bash 下 `hdc file recv` 路径被改写（S2a）
+- **原始报错**：`[Fail]Error opening file: no such file or directory, path:C:/Program Files/Git/data/local/tmp/v1.jpeg`
+- **原因**：Git Bash 把 `/data/...` 这种以 `/` 开头的参数当成 Windows 路径改写了。
+- **解决**：`hdc file send/recv` 改在 PowerShell 里执行。
+- 设备上截图：`hdc -t <设备> shell "snapshot_display -f /data/local/tmp/x.jpeg"`；
+  模拟点击/拖动（测最大化、改窗口大小）：`uitest uiInput click x y`、`uitest uiInput drag x1 y1 x2 y2 速度`，坐标是屏幕物理像素。
