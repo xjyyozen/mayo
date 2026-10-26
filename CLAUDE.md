@@ -75,6 +75,10 @@
    构建脚本须同时把输出写入**与脚本同名的 `.log` 文件**（如 `build_occt.ps1` → `build_occt.log`），
    方便随时查看进度。
 8. 凡是修改了本文件（`CLAUDE.md`），都要**同步 `git commit`**，不要留成未提交改动。
+9. 每完成一个检查点（如 S3a），**两个仓库都要 push**：
+   - `D:\harmony\mayo` 的 `harmonyos-port` 分支 → `origin`（https://github.com/xjyyozen/mayo.git）
+   - `D:\harmony\Viewer3D` 的 `main` 分支 → `origin`（https://github.com/xjyyozen/viewer3d.git，私有）
+   - push 前按"安全规则"检查：`build-profile.json5`、证书文件、`entry/libs/` 都不在提交内容里
 
 ## 安全规则
 
