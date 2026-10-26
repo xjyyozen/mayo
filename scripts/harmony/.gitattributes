@@ -1,0 +1,2 @@
+# Keep patches byte-exact (LF) so 'git apply' matches the LF OCCT sources
+*.patch -text

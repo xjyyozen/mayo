@@ -81,3 +81,26 @@
 ## 已知坑
 
 <!-- 后续踩坑后在此追加：现象 / 原始报错 / 原因 / 解决办法 -->
+
+### 1. OCCT 找不到静态 FreeType（S1b）
+- **原始报错**：`CMake Error at CMakeLists.txt:959 (message): Could not find libraries of used third-party products: 3RDPARTY_FREETYPE_LIBRARY_DIR`
+- **原因**：OCCT 的 `adm/cmake/freetype.cmake` 在 Linux 类系统上只搜索 `.so`（`CMAKE_FIND_LIBRARY_SUFFIXES` 只有 `.lib .so .dylib`），
+  而且会把找到的 `.a` 改写成 `.so`。我们的 FreeType 是静态库 `libfreetype.a`。
+- **解决**：显式传入 `-D3RDPARTY_FREETYPE_LIBRARY=<install>/lib/libfreetype.a` 和 `-D3RDPARTY_FREETYPE_LIBRARY_DIR=<install>/lib`，
+  CMake 会跳过自动搜索，不需要改 OCCT 源码。前提是 FreeType 用 `-fPIC` 编译（`build_freetype.ps1` 已开启）。
+
+### 2. OHOS 被 OCCT 当成桌面 Linux（S1b）
+- **原始报错**：`OpenGl_GraphicDriver.cxx:45:12: fatal error: 'X11/Xlib.h' file not found`
+- **原因**：OHOS 工具链会设置 `UNIX`，编译器预定义 `__OHOS__` 和 `__linux__`，但不会定义 `__ANDROID__`。
+  OCCT 的 CMake 和源码只按 `ANDROID` / `__ANDROID__` 识别"移动端、无 X11、GLES"，所以 OHOS 走进了桌面 Linux 分支，
+  去找 X11、fontconfig、libstdc++。
+- **解决**：参照 Android 的写法打补丁 `scripts/harmony/patches/occt.patch`，在 CMake 里加 `OHOS`，在源码里加 `!defined(__OHOS__)`。
+  另外，CMake 还要加 `-DCMAKE_PLATFORM_NO_VERSIONED_SONAME=ON`，否则生成的是 `.so.7.9.3`。
+  以后遇到其他三方库，先搜索它的 `__ANDROID__` / `ANDROID` 分支。
+
+### 3. PowerShell 5.1 把 stderr 误判为失败
+- **现象**：脚本开头设置了 `$ErrorActionPreference = "Stop"` 时，只要 cmake/clang 往 stderr 写一行（哪怕只是 warning），
+  就会被包装成 `NativeCommandError` 并立刻中止，真正的报错原文也被截断了。
+- **解决**：路径检查之后改成 `$ErrorActionPreference = "Continue"`，原生命令是否成功只看 `$LASTEXITCODE`。
+  输出用 `2>&1 | Log` 同时写进日志（见 `scripts/harmony/build_*.ps1`）。
+  另外，`powershell -ExecutionPolicy Bypass -File ...` 会被 Claude Code 的安全策略拦截，要在当前会话里用 `& script.ps1` 调用。

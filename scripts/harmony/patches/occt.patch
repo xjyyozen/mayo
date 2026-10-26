@@ -1,0 +1,136 @@
+OCCT 7.9.3 (tag V7_9_3, a016080b) -- HarmonyOS (OHOS) port patch
+Apply:  git -C D:\harmony\deps\src\OCCT-7_9_3 apply D:\harmony\deps\patches\occt.patch
+
+Why: OCCT's CMake only knows Android/iOS/Emscripten as "mobile GLES, no X11" platforms.
+ohos.toolchain.cmake sets CMAKE_SYSTEM_NAME=OHOS (+ UNIX), so without this patch OHOS
+falls into the desktop-Linux branch. Each change mirrors what OCCT already does for Android:
+
+1. CMakeLists.txt
+   - Define OHOS=1 when CMAKE_SYSTEM_NAME is "OHOS".
+   - BUILD_SOVERSION_NUMBERS=0 on OHOS (like Android): produce plain libTKxxx.so without
+     .so.7.9 version suffix/symlinks, which a HAP package cannot carry.
+   - No Xlib on OHOS (system has no X11).
+   - Default to USE_GLES2=ON / USE_OPENGL=OFF on OHOS (system has only OpenGL ES + EGL),
+     so TKOpenGles is built instead of TKOpenGl.
+2. adm/cmake/occt_csf.cmake
+   - New OHOS branch for system libraries. The generic UNIX branch links "pthread rt stdc++"
+     and "fontconfig": OHOS uses musl + libc++ (no libstdc++) and has no fontconfig.
+     Use "c" for threads and "EGL GLESv2" for GLES, same as Android.
+3. src/Font/Font_FontMgr.cxx
+   - Skip <fontconfig/fontconfig.h> and the X11 font-server config on OHOS (__OHOS__ is
+     predefined by the OHOS clang). Fonts are then found by scanning default dirs, which
+     already include /system/fonts (where OHOS keeps its system fonts, as on Android).
+4. src/OpenGl/OpenGl_GraphicDriver.cxx
+   - The <X11/Xlib.h>/<GL/glx.h> include is guarded by an OS list (not by HAVE_XLIB),
+     so OHOS hit "fatal error: 'X11/Xlib.h' file not found". Exclude __OHOS__ like __ANDROID__.
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index f8d62e06..1546a9ca 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -58,6 +58,11 @@ else()
+   PROJECT (OCCT)
+ endif()
+ 
++# HarmonyOS / OpenHarmony (ohos.toolchain.cmake sets CMAKE_SYSTEM_NAME=OHOS)
++if ("${CMAKE_SYSTEM_NAME}" STREQUAL "OHOS")
++  set (OHOS 1)
++endif()
++
+ set (CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/adm/cmake")
+ 
+ set (CMAKE_SUPPRESS_REGENERATION TRUE)
+@@ -148,7 +153,7 @@ if (NOT BUILD_SOVERSION_NUMBERS)
+   SET_PROPERTY(CACHE BUILD_SOVERSION_NUMBERS PROPERTY STRINGS 0 1 2 3)
+ 
+   # update default state of soversion on different platforms
+-  if (WIN32 OR ANDROID OR EMSCRIPTEN)
++  if (WIN32 OR ANDROID OR OHOS OR EMSCRIPTEN)
+     set (BUILD_SOVERSION_NUMBERS 0)
+   else()
+     set (BUILD_SOVERSION_NUMBERS 2)
+@@ -346,7 +351,7 @@ set (USE_DRACO     OFF CACHE BOOL "${USE_DRACO_DESCR}")
+ set (USE_TBB       OFF CACHE BOOL "${USE_TBB_DESCR}")
+ set (USE_EIGEN     OFF CACHE BOOL "${USE_EIGEN_DESCR}")
+ 
+-if (WIN32 OR ANDROID OR IOS OR EMSCRIPTEN)
++if (WIN32 OR ANDROID OR OHOS OR IOS OR EMSCRIPTEN)
+   # no Xlib
+ elseif (APPLE)
+   set (USE_XLIB OFF CACHE BOOL "${USE_XLIB_DESCR}")
+@@ -372,7 +377,7 @@ else()
+ endif()
+ 
+ # OpenGL
+-if (ANDROID OR IOS OR EMSCRIPTEN OR "${CMAKE_SYSTEM_NAME}" STREQUAL "WindowsStore")
++if (ANDROID OR OHOS OR IOS OR EMSCRIPTEN OR "${CMAKE_SYSTEM_NAME}" STREQUAL "WindowsStore")
+   set (USE_OPENGL OFF)
+   set (USE_GLES2 ON)
+ else()
+diff --git a/adm/cmake/occt_csf.cmake b/adm/cmake/occt_csf.cmake
+index 49e35d44..2c775e07 100644
+--- a/adm/cmake/occt_csf.cmake
++++ b/adm/cmake/occt_csf.cmake
+@@ -152,6 +152,10 @@ else()
+     set (CSF_ThreadLibs  "c")
+     set (CSF_OpenGlesLibs "EGL GLESv2")
+     set (CSF_androidlog  "log")
++  elseif (OHOS)
++    # musl libc + libc++ (no libstdc++), EGL/GLES only, no X11/fontconfig
++    set (CSF_ThreadLibs  "c")
++    set (CSF_OpenGlesLibs "EGL GLESv2")
+   elseif (UNIX)
+     set (CSF_ThreadLibs  "pthread rt stdc++")
+     if (USE_XLIB)
+diff --git a/src/Font/Font_FontMgr.cxx b/src/Font/Font_FontMgr.cxx
+index 10c1ce08..411b737a 100644
+--- a/src/Font/Font_FontMgr.cxx
++++ b/src/Font/Font_FontMgr.cxx
+@@ -70,7 +70,7 @@ static Standard_CString Font_FontMgr_Extensions[] = {"ttf",
+   #endif
+                                                      NULL};
+ 
+-  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__)                       \
++  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__OHOS__) && !defined(__APPLE__)                       \
+     && !defined(__EMSCRIPTEN__)
+ // X11 configuration file in plain text format (obsolete - doesn't exists in modern distributives)
+ static Standard_CString myFontServiceConf[] = {"/etc/X11/fs/config",
+@@ -696,7 +696,7 @@ void Font_FontMgr::InitFontDataBase()
+ #else
+ 
+   NCollection_Map<TCollection_AsciiString> aMapOfFontsDirs;
+-  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__)                       \
++  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__OHOS__) && !defined(__APPLE__)                       \
+     && !defined(__EMSCRIPTEN__)
+   if (FcConfig* aFcCfg = FcInitLoadConfig())
+   {
+@@ -799,7 +799,7 @@ void Font_FontMgr::InitFontDataBase()
+   for (NCollection_Map<TCollection_AsciiString>::Iterator anIter(aMapOfFontsDirs); anIter.More();
+        anIter.Next())
+   {
+-  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__)                       \
++  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__OHOS__) && !defined(__APPLE__)                       \
+     && !defined(__EMSCRIPTEN__)
+     OSD_File aReadFile(anIter.Value() + "/fonts.dir");
+     if (!aReadFile.Exists())
+@@ -820,7 +820,7 @@ void Font_FontMgr::InitFontDataBase()
+         RegisterFonts(aFonts, false);
+       }
+ 
+-  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__APPLE__)                       \
++  #if defined(HAVE_FREETYPE) && !defined(__ANDROID__) && !defined(__OHOS__) && !defined(__APPLE__)                       \
+     && !defined(__EMSCRIPTEN__)
+       continue;
+     }
+diff --git a/src/OpenGl/OpenGl_GraphicDriver.cxx b/src/OpenGl/OpenGl_GraphicDriver.cxx
+index a06c4490..fb85bb25 100644
+--- a/src/OpenGl/OpenGl_GraphicDriver.cxx
++++ b/src/OpenGl/OpenGl_GraphicDriver.cxx
+@@ -40,7 +40,7 @@ IMPLEMENT_STANDARD_RTTIEXT(OpenGl_GraphicDriver, Graphic3d_GraphicDriver)
+   #include <Aspect_NeutralWindow.hxx>
+ #endif
+ 
+-#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__QNX__)                                 \
++#if !defined(_WIN32) && !defined(__ANDROID__) && !defined(__OHOS__) && !defined(__QNX__)           \
+   && (!defined(__APPLE__) || defined(HAVE_XLIB))
+   #include <X11/Xlib.h> // XOpenDisplay()
+   #include <X11/Xutil.h>
