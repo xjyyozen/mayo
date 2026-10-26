@@ -147,3 +147,15 @@
   明明前面已经给变量赋了值。
 - **原因**：Windows PowerShell 5.1 把**不带 BOM 的 UTF-8** 按 GBK 读取，中文注释被读乱，行尾换行被吞掉，紧跟的下一行代码变成了注释的一部分。
 - **解决**：含中文的 `.ps1` 一律保存为 **UTF-8 with BOM**（`deps` 下的构建脚本是纯英文，所以没踩到）。
+
+### 10. ArkUI NDK 输入事件的坐标是 vp，不是 px（S2c）
+- **现象**：点击 ViewCube 没反应；日志里点击位置是 `(1014,56)`，实际应为 `(1926,107)`，正好差屏幕密度 1.9 倍。拖动旋转不受影响（只用相对位移）。
+- **原因**：`OH_ArkUI_PointerEvent_GetX/GetY`、`OH_ArkUI_UIInputEvent_GetEventTargetWidth` 头文件注释写的是 px，实测（API 26，MateBook）都是 vp。
+- **解决**：Viewer3D `SurfaceHost::PixelScale` 用"Surface 像素宽度 / 事件里的组件宽度"换算，不依赖坐标单位。
+
+### 11. OCCT 灯光与交互的几个坑（S2c）
+- 对 `V3d_AmbientLight` 调用 `SetHeadlight()` 会抛 `Standard_ProgramError`，未捕获直接闪退（SIGABRT）；平行光用构造函数参数指定是否头灯。
+- 非 PBR（Phong）着色下**平行光的 `SetIntensity()` 被忽略**（`OpenGl_ShaderManager.cxx`："used by PBR and ignored by old shading model"），要调亮度就改灯光颜色；环境光的强度有效。
+- `V3d_DirectionalLight` 的方向是**光线前进方向**（从灯指向场景）。
+- 默认黄铜材质高光强，辅光的反光会让背光面反而最亮；需要看清面的明暗时用哑光材质（如 `Graphic3d_NameOfMaterial_Plastered`）。
+- `AIS_ViewController::HandleViewEvents` 返回前会清零"还要画下一帧"标志，在 `FlushViewEvents` 之后读 `toAskNextFrame()` 永远是 false（ViewCube 动画停在第一帧）；要在重写的 `handleViewRedraw` 里读。
