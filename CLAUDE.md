@@ -42,8 +42,10 @@
 | S4 | ArkUI 界面 MVP | 打开文件、视图操作、模型树、剖切、基础测量 |
 | S5 | 一多适配 + 上架 | PC / 平板 / 手机均可运行 |
 
-**当前阶段：S2**（S1 已于 2026-10-26 完成：`D:\harmony\OcctProbe` 在 MateBook 上读取 `screw.step` 成功，
+**当前阶段：S3**（S1 已于 2026-10-26 完成：`D:\harmony\OcctProbe` 在 MateBook 上读取 `screw.step` 成功，
 1 个实体、10 个面、包围盒 20.001 × 20.001 × 42.300，耗时 21.9 ms）
+- S3a（2026-10-26）：Mayo 核心（MayoCore + MayoIO 源码，无 Qt）由 `harmony/mayo_core/CMakeLists.txt` 编成静态库 `mayo_core`，
+  Viewer3D 通过 `add_subdirectory` 引入；设备上用 Mayo IO 系统导入 `screw.step`：文档树 1 个节点、根节点 `the product name`、导入约 20 ms
 
 ## 目录约定
 
