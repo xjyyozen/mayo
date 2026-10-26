@@ -72,6 +72,7 @@
    统一使用 **`-j 14`**（`cmake --build ... --parallel 14` / `ninja -j 14`）。
    构建脚本须同时把输出写入**与脚本同名的 `.log` 文件**（如 `build_occt.ps1` → `build_occt.log`），
    方便随时查看进度。
+8. 凡是修改了本文件（`CLAUDE.md`），都要**同步 `git commit`**，不要留成未提交改动。
 
 ## 安全规则
 
@@ -124,3 +125,25 @@
 - **解决**：`hdc file send/recv` 改在 PowerShell 里执行。
 - 设备上截图：`hdc -t <设备> shell "snapshot_display -f /data/local/tmp/x.jpeg"`；
   模拟点击/拖动（测最大化、改窗口大小）：`uitest uiInput click x y`、`uitest uiInput drag x1 y1 x2 y2 速度`，坐标是屏幕物理像素。
+
+### 7. `OH_ArkUI_SurfaceHolder_Create` 返回空（S2b）
+- **现象**：ArkTS 侧 `XComponent({ type: XComponentType.SURFACE })` + `onAttach` 里把 FrameNode 传给 C++，
+  `OH_ArkUI_SurfaceHolder_Create` 返回 `nullptr`，`OH_ArkUI_XComponent_RegisterOnFrameCallback` 返回 `401`，hilog 里没有任何框架报错。
+- **原因**（查 OpenHarmony 源码 `native_node_napi.cpp` 得知）：`OH_ArkUI_GetNodeHandleFromNapiValue` 要靠 ArkUI NDK 的实现表判断
+  "这是新式 XComponent"，而实现表要等第一次调用 `OH_ArkUI_QueryModuleInterfaceByName` 才加载。没加载时句柄不会被标记为
+  XComponent（`isBindNative=false`），后续 SurfaceHolder 接口全部失败。
+- **解决**：先调用 `OH_ArkUI_QueryModuleInterfaceByName(ARKUI_NATIVE_NODE, "ArkUI_NativeNodeAPI_1")`，
+  **再**调用 `OH_ArkUI_GetNodeHandleFromNapiValue`（Viewer3D 的 `SurfaceHost::Create` 已按此顺序封装）。
+
+### 8. OCCT 在 OHOS 上找不到 "sans-serif" 字体（S2b）
+- **原始警告**：`Font_FontMgr, warning: unable to find font 'sans-serif' [regular]; 'DejaVu Math TeX Gyre' [aspects: regular] [paths: /system/fonts/DejaVuMathTeXGyre.ttf] is used instead`
+- **原因**：`/system/fonts` 能正常扫描（673 个字体），ViewCube 文字也能显示，不是方块；但 OCCT 在 OHOS 上走的是 X11 的字体别名表
+  （arial / helvetica / freesans / dejavu sans），设备上一个都没有，于是回退到任意字体，ViewCube 上的字变成了衬线数学字体。
+- **解决**：应用启动时 `Font_FontMgr::GetInstance()->AddFontAlias("sans-serif", "HarmonyOS Sans")`（`serif` 同理），
+  见 Viewer3D `occt_renderer.cpp`。以后也可以在 `occt.patch` 的 `Font_FontMgr.cxx` 里给 OHOS 加别名分支。
+
+### 9. PowerShell 5.1 脚本里的中文注释会吃掉下一行代码
+- **现象**：`sync_occt_libs.ps1` 运行时报 `You cannot call a method on a null-valued expression` / `Cannot index into a null array`，
+  明明前面已经给变量赋了值。
+- **原因**：Windows PowerShell 5.1 把**不带 BOM 的 UTF-8** 按 GBK 读取，中文注释被读乱，行尾换行被吞掉，紧跟的下一行代码变成了注释的一部分。
+- **解决**：含中文的 `.ps1` 一律保存为 **UTF-8 with BOM**（`deps` 下的构建脚本是纯英文，所以没踩到）。
