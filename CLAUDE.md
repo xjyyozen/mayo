@@ -1,9 +1,16 @@
-# CLAUDE.md — Mayo HarmonyOS 移植项目
+# CLAUDE.md — 鸿蒙原生 3D 查看器（基于 Mayo C++ 核心）
 
 ## 目标
 
-把开源 3D CAD 查看器 **Mayo**（Qt + OpenCascade）移植到 **HarmonyOS 7.0 PC（2in1 设备）**，
-PC 版稳定后再扩展到平板、手机。
+基于开源 3D CAD 查看器 **Mayo**（Qt + OpenCascade）做一个**鸿蒙原生 3D 查看器**，
+目标**一套代码覆盖鸿蒙 PC（2in1）/ 平板 / 手机**。不再整体移植 Qt 版 Mayo，架构为：
+
+- **前端**：ArkUI 原生界面
+- **核心**：复用 Mayo 的 C++ 核心（`base`、`graphics`、`gui`、`io_*`、`measure`），
+  编译成 `.so`，通过 **NAPI** 供 ArkTS 调用
+- **渲染**：XComponent + EGL + OCCT **TKOpenGles**
+
+> Mayo 的 Qt 界面代码（`src/app`、`src/qtbackend`、`src/qtcommon`）**不移植**，只作为功能参考。
 
 - 工作分支：`harmonyos-port`（上游主分支为 `develop`）
 - 移植分析笔记：[docs/HARMONY_PORT_NOTES.md](docs/HARMONY_PORT_NOTES.md)
@@ -13,7 +20,7 @@ PC 版稳定后再扩展到平板、手机。
 - API 版本：**26.0.0**；CPU 架构：**arm64-v8a**
 - 图形：**只有 OpenGL ES + EGL，没有桌面 OpenGL**（没有 GLX / WGL / 兼容模式 profile）
 - 应用沙箱：应用只能直接读写自己的沙箱目录；**访问用户文件必须走 DocumentViewPicker**
-  （不能假设随意路径可读写，`QFileDialog` 的原生行为需要验证/替换）
+  （不能假设随意路径可读写；C++ 核心拿到的是 Picker 返回的 URI/文件描述符，不是任意路径）
 
 ## 环境
 
@@ -29,13 +36,28 @@ PC 版稳定后再扩展到平板、手机。
 
 | 阶段 | 内容 | 完成标志 |
 |---|---|---|
-| S1 | Qt for HarmonyOS Hello World | 一个 Qt 窗口在 MateBook Pro S 上显示出来 |
-| S2 | OCCT 交叉编译 | 得到 arm64-v8a 的 OCCT 库（GLES 版 TKOpenGles） |
-| S3 | OCCT 渲染打通 | 在设备上用 OCCT 显示一个立方体并能旋转 |
-| S4 | Mayo 整体移植 | Mayo 能打开 STEP/STL 等文件并显示 |
-| S5 | PC 适配与发布 | 键鼠/窗口/文件选择体验完善，签名打包发布 |
+| S1 | 交叉编译 FreeType + OCCT 7.9.x（GLES 版） | 设备上读取 STEP 成功 |
+| S2 | XComponent + EGL + OCCT 渲染 | 设备上显示立方体并可旋转 |
+| S3 | Mayo 核心编译 + NAPI 接口 | ArkUI 调用 C++ 打开 STEP 并显示 |
+| S4 | ArkUI 界面 MVP | 打开文件、视图操作、模型树、剖切、基础测量 |
+| S5 | 一多适配 + 上架 | PC / 平板 / 手机均可运行 |
 
 **当前阶段：S1**
+
+## 目录约定
+
+第三方依赖（FreeType、OCCT 等）统一放 `D:\harmony\deps\`：
+
+| 目录 | 用途 |
+|---|---|
+| `D:\harmony\deps\src\` | 源码 |
+| `D:\harmony\deps\build\` | 构建目录 |
+| `D:\harmony\deps\install\arm64-v8a\` | 安装产物（头文件、`.so`、`.a`） |
+
+## 许可
+
+- Mayo 采用 **BSD-2-Clause** 许可：复用的代码**保留原版权声明**和 LICENSE 文本。
+- 产品**另起名字**，不直接叫 "Mayo"。
 
 ## 工作规则
 
@@ -43,7 +65,7 @@ PC 版稳定后再扩展到平板、手机。
 2. 报错**保留原文**，不要猜测、不要改写；分析时引用原始报错。
 3. 鸿蒙相关问题**先用 `devecocli` 查官方文档**，再动手。
 4. 每完成一步就 `git commit` 一次。
-5. 大体积编译产物（OCCT/Qt 构建目录、安装目录等）放 **D 盘或 F 盘**，**不要放 C 盘**。
+5. 大体积编译产物（OCCT 等构建目录、安装目录，见"目录约定"）放 **D 盘或 F 盘**，**不要放 C 盘**。
 6. 向用户解释时用**通俗比喻**（用户几乎没有编程基础）。
 
 ## 安全规则
