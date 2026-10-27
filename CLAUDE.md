@@ -85,6 +85,7 @@
    - `D:\harmony\mayo` 的 `harmonyos-port` 分支 → `origin`（https://github.com/xjyyozen/mayo.git）
    - `D:\harmony\Viewer3D` 的 `main` 分支 → `origin`（https://github.com/xjyyozen/viewer3d.git，私有）
    - push 前按"安全规则"检查：`build-profile.json5`、证书文件、`entry/libs/` 都不在提交内容里
+10. **回复和文档一律使用中文**（代码标识符、命令、原始报错保持原文）。
 
 ## 安全规则
 
