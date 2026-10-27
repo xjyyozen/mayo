@@ -58,8 +58,15 @@
 - S3e-1（2026-10-27）：STEP 默认"精简形状修复"（Mayo STEP 读取器新参数 `quickShapeFix`），三角化失败的面 > 1% 时自动用完整修复重导；
   IGES 保持完整修复。9 个文件回归截图与修改前一致，大 STEP 导入快 9~13%（RK3506 21.6 → 18.7 s），远小于预期；
   拖动时关闭悬停高亮（H）实测无效果，S3d 的归因有误。加载提速改走"转换结果缓存"（方案 I，S5）。详见 Viewer3D `docs/perf-s3.md`
+- S3e-2（2026-10-27）：按阶段记录内存峰值；按零件分批三角化（G，Viewer3D `MeshEntityByParts`）+ 转换后立即释放读取器（D，Mayo `io_system.cpp`）
+  让大 STEP 内存峰值降 61~71%（C300 4.1 → 1.2 GB，RK3506 2.1 → 0.84 GB），三角化还快了 21~48%；显示对象分帧创建（C，Mayo
+  `GuiDocument::setDefaultDeferredDisplay` + Viewer3D 每帧一批），UI 线程最长占用从 1.7 s 降到一帧，代价是全部显示完的时间变长 1.4~4 倍。
+  9 个文件回归截图一致（GearBox.IGS 三角形少 0.9%，看不出差别）。详见 Viewer3D `docs/perf-s3.md`
 
 ### S4 待办
+
+- 单个大网格对象（如 Part1.STL，一个对象 77 万三角形）分帧显示时一步仍要 400 ms：考虑拆块或后台线程计算显示数据
+- 分帧显示期间每帧都重画已显示部分，C300 全部显示完要 4.8 s（一次性显示 1.7 s）：可考虑没人操作时隔几帧才画一次
 
 - 菜单提供"以完整修复模式重新打开"（精简形状修复下个别文件可能显示异常，让用户手动切到完整修复；底层已有 `MayoSession::ShapeFixMode::Full`）
 
@@ -236,3 +243,13 @@
   ArkTS 的处理代码仍在 release 字节码里，但入口处判断 `BuildProfile.DEBUG`（release 为常量 false），不会生效。
 - 往 debug 应用沙箱放文件：`hdc file send -b com.xjy.viewer3d <本地目录> data/storage/el2/base/haps/entry/files/`
   （不带 `-b` 时报 permission denied；目标子目录不存在时发单个文件会失败，要发整个目录）。回归脚本：Viewer3D `scripts/s3e_regress.ps1`。
+
+### 16. 分帧显示与内存峰值（S3e-2）
+- **三角化的中间数据远大于结果**：`BRepMesh_IncrementalMesh` 一次处理整个 C300 装配时 RSS 多出约 3 GB，而最终网格只有几十 MB。
+  按去重零件分批（每批约 2000 个面，同一个弦高）后只多出约 400 MB，而且更快。IGES 每个零件是一个实体，弦高本来就按实体算。
+- **读取器要尽早释放**：Mayo 原来在整个导入结束才析构读取器，STEP 读取器（实体图 + 转换映射）在 C300 上约 490 MB，正好叠在三角化峰值上。
+- **GuiDocument 延迟显示**：`GuiDocument` 构造时就 `mapEntity()` 并 `Display()` 所有对象（计算显示数据 + 选择），只能用全局开关
+  `setDefaultDeferredDisplay(true)` 在建 GuiDocument 之前打开；之后用 `displayPendingObjects(fnStop)` 分步处理，一步 = 显示一个对象
+  （`AddObjectDisableSelectionMode`）或激活一个对象的选择。延迟显示期间 `graphicsBoundingBox()` 不全，FitAll 要用自己算的包围盒。
+- 触控拖动时绘制明显比没有输入时快（同一场景 7 ms 对 11 ms），推测是系统 touch boost 提频；对比帧耗时要注意输入方式。
+
