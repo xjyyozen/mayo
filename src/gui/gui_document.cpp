@@ -596,6 +596,12 @@ int GuiDocument::displayPendingObjects(const std::function<bool()>& fnStop)
         ++count;
         if (pending.activateSelection) {
             // Same selection mode as AIS_InteractiveContext::Display() with auto-activation
+            // NOTE The object was displayed with no selection mode(AddObjectDisableSelectionMode), so it
+            //      isn't registered in the selection manager yet. It must be loaded before activation,
+            //      otherwise SelectMgr_SelectionManager::Activate() computes the selection but doesn't
+            //      add it to the viewer selector and the object can't be detected nor selected
+            //      (see AIS_InteractiveContext::Activate(mode) which does the same)
+            m_gfxScene.aisContextPtr()->Load(object.ptr, -1);
             m_gfxScene.activateObjectSelection(object.ptr, object.ptr->GlobalSelectionMode());
             if (fnStop())
                 break;
@@ -604,7 +610,12 @@ int GuiDocument::displayPendingObjects(const std::function<bool()>& fnStop)
         }
 
         m_gfxScene.addObject(object.ptr, GraphicsScene::AddObjectDisableSelectionMode);
-        m_vecPendingObject.push_back({ pending.entityTreeNodeId, pending.objectIndex, true });
+        // Selection is activated by the next step, so a displayed object is quickly selectable(even
+        // while the remaining objects are still pending)
+        m_vecPendingObject.insert(
+            m_vecPendingObject.begin() + m_pendingObjectPos,
+            PendingObject{ pending.entityTreeNodeId, pending.objectIndex, true }
+        );
         auto driver = GraphicsObjectDriver::get(object.ptr);
         if (driver)
             driver->applyDisplayMode(object.ptr, this->activeDisplayMode(driver));

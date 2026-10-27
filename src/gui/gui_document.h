@@ -149,9 +149,9 @@ public:
     // When enabled, mapping an entity only creates its graphics objects and they are displayed later
     // by displayPendingObjects(). Computing presentations(and selections) of a large model takes
     // seconds, this allows to spread it over several frames so the UI thread is never blocked for
-    // long. Each object is processed in two steps: first displayed(presentation computed) with no
-    // selection mode, then once all objects are displayed its selection mode is activated
-    // (sensitive entities computed), so objects become visible as soon as possible
+    // long. Each object is processed in two consecutive steps: first displayed(presentation computed)
+    // with no selection mode, then its selection mode is activated(sensitive entities computed), so
+    // displayed objects can be detected/selected while the remaining ones are still pending
     // Default is off(objects are displayed by mapEntity() as in upstream Mayo)
     // Applies to GuiDocument objects created afterwards(entities are mapped in the constructor)
     static void setDefaultDeferredDisplay(bool on);
