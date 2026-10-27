@@ -55,6 +55,12 @@ static OccHandle<AIS_Trihedron> createOriginTrihedron()
     return aisTrihedron;
 }
 
+static bool& defaultDeferredDisplay()
+{
+    static bool on = false;
+    return on;
+}
+
 static GuiDocument::GradientBackground& defaultGradientBackground()
 {
     static GuiDocument::GradientBackground defaultGradientBackground{
@@ -96,7 +102,8 @@ GuiDocument::GuiDocument(const DocumentPtr& doc, GuiApplication* guiApp)
       m_document(doc),
       m_v3dView(m_gfxScene.createV3dView()),
       m_aisOriginTrihedron(Internal::createOriginTrihedron()),
-      m_cameraAnimation(new V3dViewCameraAnimation)
+      m_cameraAnimation(new V3dViewCameraAnimation),
+      m_deferredDisplay(Internal::defaultDeferredDisplay())
 {
     Expects(!doc.IsNull());
 
@@ -568,6 +575,61 @@ void GuiDocument::setDefaultGradientBackground(const GradientBackground& gradien
     Internal::defaultGradientBackground() = gradientBkgnd;
 }
 
+void GuiDocument::setDefaultDeferredDisplay(bool on)
+{
+    Internal::defaultDeferredDisplay() = on;
+}
+
+int GuiDocument::displayPendingObjects(const std::function<bool()>& fnStop)
+{
+    int count = 0;
+    while (this->hasPendingObjects()) {
+        const PendingObject pending = m_vecPendingObject.at(m_pendingObjectPos++);
+        auto itEntity = std::find_if(
+            m_vecGraphicsEntity.begin(), m_vecGraphicsEntity.end(),
+            [=](const GraphicsEntity& item) { return item.treeNodeId == pending.entityTreeNodeId; }
+        );
+        if (itEntity == m_vecGraphicsEntity.end())
+            continue; // Entity unmapped meanwhile
+
+        GraphicsEntity::Object& object = itEntity->vecObject.at(pending.objectIndex);
+        ++count;
+        if (pending.activateSelection) {
+            // Same selection mode as AIS_InteractiveContext::Display() with auto-activation
+            m_gfxScene.activateObjectSelection(object.ptr, object.ptr->GlobalSelectionMode());
+            if (fnStop())
+                break;
+
+            continue;
+        }
+
+        m_gfxScene.addObject(object.ptr, GraphicsScene::AddObjectDisableSelectionMode);
+        m_vecPendingObject.push_back({ pending.entityTreeNodeId, pending.objectIndex, true });
+        auto driver = GraphicsObjectDriver::get(object.ptr);
+        if (driver)
+            driver->applyDisplayMode(object.ptr, this->activeDisplayMode(driver));
+
+        object.bndBox = GraphicsUtils::AisObject_boundingBox(object.ptr);
+        object.trsfOriginal = m_gfxScene.objectTransformation(object.ptr);
+        BndUtils::add(&itEntity->bndBox, object.bndBox);
+        BndUtils::add(&m_gfxBoundingBox, object.bndBox);
+        if (fnStop())
+            break;
+    }
+
+    if (!this->hasPendingObjects()) {
+        m_vecPendingObject.clear();
+        m_pendingObjectPos = 0;
+    }
+
+    if (count > 0) {
+        m_gfxScene.redraw();
+        this->signalGraphicsBoundingBoxChanged.send(m_gfxBoundingBox);
+    }
+
+    return count;
+}
+
 void GuiDocument::onDocumentEntityAdded(TreeNodeId entityTreeNodeId)
 {
     this->mapEntity(entityTreeNodeId);
@@ -694,6 +756,19 @@ void GuiDocument::mapEntity(TreeNodeId entityTreeNodeId)
                 this->mapLeafTreeNode(id, gfxProduct, &gfxEntity);
         }
     });
+
+    if (m_deferredDisplay) {
+        // Objects are displayed later by displayPendingObjects()(exploding factor is not applied to
+        // them, it's expected to be null while a document is being loaded)
+        for (size_t i = 0; i < gfxEntity.vecObject.size(); ++i)
+            m_vecPendingObject.push_back({ entityTreeNodeId, i, false });
+
+        traverseTree(entityTreeNodeId, docModelTree, [=](TreeNodeId id) {
+            m_mapTreeNodeCheckState.insert({ id, CheckState::On });
+        });
+        m_vecGraphicsEntity.push_back(std::move(gfxEntity));
+        return;
+    }
 
     for (const GraphicsEntity::Object& object : gfxEntity.vecObject) {
         m_gfxScene.addObject(object.ptr);

@@ -145,6 +145,22 @@ public:
     static const GradientBackground& defaultGradientBackground();
     static void setDefaultGradientBackground(const GradientBackground& gradientBkgnd);
 
+    // -- Deferred display of graphics objects (harmonyos-port)
+    // When enabled, mapping an entity only creates its graphics objects and they are displayed later
+    // by displayPendingObjects(). Computing presentations(and selections) of a large model takes
+    // seconds, this allows to spread it over several frames so the UI thread is never blocked for
+    // long. Each object is processed in two steps: first displayed(presentation computed) with no
+    // selection mode, then once all objects are displayed its selection mode is activated
+    // (sensitive entities computed), so objects become visible as soon as possible
+    // Default is off(objects are displayed by mapEntity() as in upstream Mayo)
+    // Applies to GuiDocument objects created afterwards(entities are mapped in the constructor)
+    static void setDefaultDeferredDisplay(bool on);
+    bool hasPendingObjects() const { return m_pendingObjectPos < m_vecPendingObject.size(); }
+    size_t pendingObjectCount() const { return m_vecPendingObject.size() - m_pendingObjectPos; }
+    // Processes pending objects(display or selection activation) in order until `fnStop()` returns
+    // true(it's checked after each step, so at least one step is done). Returns the count of steps done
+    int displayPendingObjects(const std::function<bool()>& fnStop);
+
     // Signals
     using MapVisibilityByTreeNodeId = std::unordered_map<TreeNodeId, CheckState>;
     mutable Signal<const MapVisibilityByTreeNodeId&> signalNodesVisibilityChanged;
@@ -207,6 +223,17 @@ private:
     std::unordered_map<TreeNodeId, CheckState> m_mapTreeNodeCheckState;
 
     double m_explodingFactor = 0.;
+
+    // Objects created by mapEntity() but not yet displayed or selectable(deferred display): entity
+    // tree node, index in GraphicsEntity::vecObject and step to be done
+    struct PendingObject {
+        TreeNodeId entityTreeNodeId;
+        size_t objectIndex;
+        bool activateSelection; // false: display the object, true: activate its selection mode
+    };
+    bool m_deferredDisplay = false;
+    std::vector<PendingObject> m_vecPendingObject;
+    size_t m_pendingObjectPos = 0;
 
     ScopedSignalConnections<> m_conns;
 };
