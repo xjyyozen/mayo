@@ -52,6 +52,9 @@
   复制到 `cacheDir/import/`（每次打开前清空）→ NAPI 异步任务在后台线程导入，屏幕中央显示"正在加载 xx%"（Mayo 的 TaskProgress），
   失败时显示通俗原因；新文档显示后关闭并释放旧文档。OCCT 开启 RapidJSON 以支持 glTF。
   设备实测：38.8 MB 的 PCB STEP（2121 个节点）后台导入 20.3 s，界面不卡；GLB / STL / OBJ / STEP 均可打开
+- S3d（2026-10-27）：分段计时 + 内存峰值 + 拖动帧率，结果见 Viewer3D `docs/perf-s3.md`。
+  交互不是瓶颈（单帧最长 12.8 ms）；大 STEP 慢在 OCCT 形状修复（RK3506 的 21.6 s 里约 10.7 s），
+  导入期间内存峰值达 2.3 GB；生成显示对象在 UI 线程卡约 1 s。建议 S4 前先做 S3e：精简形状修复 + 显示阶段不卡 UI
 
 ## 目录约定
 
@@ -205,3 +208,10 @@
 - **glTF 要 RapidJSON**：不开时 TKDEGLTF 照样编出来，运行时报 `glTF reader is unavailable - OCCT has been built without RapidJSON support`。
   开启方法见 `scripts/harmony/README.md`；`HAVE_RAPIDJSON` 是全局宏，打开后几乎全量重编。
 - 在 Picker 里自动点选文件时，"安全访问文件"提示条会让列表整体下移，点之前先截图确认坐标。
+
+### 14. 性能日志被挤出 hilog 缓冲区（S3d）
+- **现象**：连续打开 8 个文件后 `hilog -x -T VIEWER3D_PERF` 只剩最后一个文件的记录。
+- **原因**：app 日志缓冲区默认只有 512 KB（`hilog -g` 查看），导入 STEP / IGES 时 OCCT 的 `[OCCT]` 警告大量刷屏，把前面的记录覆盖了。
+- **解决**：`hilog -G 16M -t app` 调大缓冲区（重启可能恢复）；Viewer3D 的 `LOGPERF` 同时追加写入沙箱文件
+  `files/perf-s3.log`，用 `hdc file recv /data/app/el2/100/base/com.xjy.viewer3d/haps/entry/files/perf-s3.log` 取回。
+- 另外：OCCT 读取器会经 Mayo 的 `TaskProgress::setStep` 报自己的子步骤（如 STEP 的 "Fixing face"），按 Mayo 步骤顺序计数会错，要按标题精确匹配。
