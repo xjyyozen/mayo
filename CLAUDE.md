@@ -42,7 +42,7 @@
 | S4 | ArkUI 界面 MVP | 打开文件、视图操作、模型树、剖切、基础测量 |
 | S5 | 一多适配 + 上架 | PC / 平板 / 手机均可运行 |
 
-**当前阶段：S3**（S1 已于 2026-10-26 完成：`D:\harmony\OcctProbe` 在 MateBook 上读取 `screw.step` 成功，
+**当前阶段：S4**（S3、S3.5 已完成，S4a 应用骨架已完成；下面按时间列出各检查点。S1 已于 2026-10-26 完成：`D:\harmony\OcctProbe` 在 MateBook 上读取 `screw.step` 成功，
 1 个实体、10 个面、包围盒 20.001 × 20.001 × 42.300，耗时 21.9 ms）
 - S3a（2026-10-26）：Mayo 核心（MayoCore + MayoIO 源码，无 Qt）由 `harmony/mayo_core/CMakeLists.txt` 编成静态库 `mayo_core`，
   Viewer3D 通过 `add_subdirectory` 引入；设备上用 Mayo IO 系统导入 `screw.step`：文档树 1 个节点、根节点 `the product name`、导入约 20 ms
@@ -62,6 +62,11 @@
   让大 STEP 内存峰值降 61~71%（C300 4.1 → 1.2 GB，RK3506 2.1 → 0.84 GB），三角化还快了 21~48%；显示对象分帧创建（C，Mayo
   `GuiDocument::setDefaultDeferredDisplay` + Viewer3D 每帧一批），UI 线程最长占用从 1.7 s 降到一帧，代价是全部显示完的时间变长 1.4~4 倍。
   9 个文件回归截图一致（GearBox.IGS 三角形少 0.9%，看不出差别）。详见 Viewer3D `docs/perf-s3.md`
+
+- S3.5（2026-10-27）：UI 规范 + 玻璃面板。`systemMaterial` 在目标设备（MateBook Pro S，系统 7.0.0.111）的通用组件上无效（只有 Select 等系统组件自带材质有效），
+  GlassPanel 改用 `backgroundEffect`（`GLASS_IMPL` 开关可切回 `systemMaterial`）；C300 拖动旋转有 / 无面板开销在噪声内（见 Viewer3D `docs/perf-s3.md` "S3.5 材质开销"）。详见 `docs/UI_SPEC.md`、`docs/UI_RESEARCH.md` 第 6 节
+- S4a（2026-10-27）：应用骨架。应用名"观棱"（英文 Guanleng）+ 占位图标；`@Env` 断点（sm < 600 ≤ md < 840 ≤ lg）切换布局：文件胶囊、右上角按钮组、模型树面板 / 把手、属性卡片位置、Dock（6 / 5 个按钮）、
+  sm 底部上滑面板（可拖动吸附）、空状态 / 加载 / 错误卡片；深色 ViewCube 改中性灰；窗口从最大化缩到最窄布局正确；6 张截图在 `docs/screenshots/s4a/`；pick_check 回归通过。详见 `docs/UI_SPEC.md` 第 10 节
 
 ### S4 待办
 
