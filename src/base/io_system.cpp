@@ -189,6 +189,11 @@ void transfer(ImportTaskData& taskData, const System::ArgsImport& args)
             taskData.messenger.error() << System::textIdTr("File transfer problem, no entity imported");
     }
 
+    // harmonyos-port: the reader is not needed once its content is in the target document. Release
+    // it now rather than when the import task ends, so its in-memory model (eg the whole STEP
+    // entity graph and transfer maps of STEPCAFControl_Reader) is freed before entity post-processing
+    // (meshing) and doesn't add up to its memory peak
+    taskData.reader.reset();
     taskData.transferred = true;
 }
 
