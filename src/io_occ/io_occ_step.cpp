@@ -64,6 +64,11 @@ public:
                      "STEP Representation Items")
         );
 
+        this->quickShapeFix.setDescription(
+            textIdTr("Skip the time-consuming shape healing steps(fixing faces, updating tolerances) "
+                     "during translation. Faster for viewing, but faulty files may show defects")
+        );
+
         this->productContext.setDescriptions({
             { ProductContext::Design, textIdTr("Translate only products that have "
               "`PRODUCT_DEFINITION_CONTEXT` with field `life_cycle_stage` set to `design`")
@@ -113,6 +118,7 @@ public:
         this->readShapeAspect.setValue(params.readShapeAspect);
         this->readSubShapesNames.setValue(params.readSubShapesNames);
         this->encoding.setValue(params.encoding);
+        this->quickShapeFix.setValue(params.quickShapeFix);
     }
 
     PropertyEnum<ProductContext> productContext{ this, textId("productContext") };
@@ -121,6 +127,7 @@ public:
     PropertyBool readShapeAspect{ this, textId("readShapeAspect") };
     PropertyBool readSubShapesNames{ this, textId("readSubShapesNames") };
     PropertyEnum<Encoding> encoding{ this, textId("encoding") };
+    PropertyBool quickShapeFix{ this, textId("quickShapeFix") };
 };
 
 OccStepReader::OccStepReader()
@@ -155,6 +162,7 @@ NCollection_Sequence<TDF_Label> OccStepReader::transfer(DocumentPtr doc, TaskPro
     MayoIO_CafGlobalScopedLock(cafLock);
     OccStaticVariablesRollback rollback;
     this->changeStaticVariables(&rollback);
+    Private::cafSetShapeFix(*m_reader, m_params.quickShapeFix);
     return Private::cafTransfer(*m_reader, doc, progress);
 }
 
@@ -173,6 +181,7 @@ void OccStepReader::applyProperties(const PropertyGroup* group)
         m_params.readShapeAspect = ptr->readShapeAspect;
         m_params.readSubShapesNames = ptr->readSubShapesNames;
         m_params.encoding = ptr->encoding;
+        m_params.quickShapeFix = ptr->quickShapeFix;
     }
 }
 

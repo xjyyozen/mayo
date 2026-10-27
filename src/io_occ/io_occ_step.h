@@ -92,6 +92,7 @@ public:
         bool readShapeAspect = true;
         bool readSubShapesNames = false;
         Encoding encoding = Encoding::UTF8;
+        bool quickShapeFix = false;
     };
     Parameters& parameters() { return m_params; }
     const Parameters& constParameters() const { return m_params; }

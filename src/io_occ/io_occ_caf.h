@@ -41,6 +41,13 @@ OccHandle<Transfer_FinderProcess> cafFinderProcess(const STEPCAFControl_Writer& 
 bool cafReadFile(IGESCAFControl_Reader& reader, const FilePath& filepath, TaskProgress* progress);
 bool cafReadFile(STEPCAFControl_Reader& reader, const FilePath& filepath, TaskProgress* progress);
 
+// Configures the shape healing(ShapeFix) applied to the shapes during STEP transfer
+// With quick mode the costly per-face/wire analysis(intersections, small features, wire orientation) is
+// skipped, other steps keep OpenCascade defaults. Faster for viewing, faulty files may show defects
+// Note: not provided for IGES, quick mode breaks many IGES models(missing faces, stray curves)
+// Note: OpenCascade read actor is shared by all readers of the same format, so this should be called before each transfer
+void cafSetShapeFix(STEPCAFControl_Reader& reader, bool quick);
+
 NCollection_Sequence<TDF_Label> cafTransfer(IGESCAFControl_Reader& reader, DocumentPtr doc, TaskProgress* progress);
 NCollection_Sequence<TDF_Label> cafTransfer(STEPCAFControl_Reader& reader, DocumentPtr doc, TaskProgress* progress);
 

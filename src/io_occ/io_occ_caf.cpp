@@ -16,6 +16,10 @@
 #include <STEPCAFControl_Reader.hxx>
 #include <STEPCAFControl_Writer.hxx>
 #include <gsl/util>
+#if OCC_VERSION_HEX >= OCC_VERSION_CHECK(7, 8, 0)
+#  include <DESTEP_Parameters.hxx>
+#  include <ShapeProcess.hxx>
+#endif
 
 namespace Mayo::IO::Private {
 
@@ -99,6 +103,47 @@ bool cafReadFile(IGESCAFControl_Reader& reader, const FilePath& filepath, TaskPr
 
 bool cafReadFile(STEPCAFControl_Reader& reader, const FilePath& filepath, TaskProgress* progress) {
     return cafGenericReadFile(reader, filepath, progress);
+}
+
+#if OCC_VERSION_HEX >= OCC_VERSION_CHECK(7, 8, 0)
+namespace {
+
+template<typename CafReaderType>
+void cafGenericSetShapeFix(CafReaderType& reader, DE_ShapeFixParameters params, bool quick)
+{
+    if (quick) {
+        // Skip the costly intersection/small-feature/orientation analysis done for each face and wire,
+        // but keep the fixes needed to get a valid face(wire order/connection, gaps, seam, natural bounds)
+        // Note: turning off FixFaceMode as a whole is faster but faulty(missing faces, wrong bounding box)
+        using FixMode = DE_ShapeFixParameters::FixMode;
+        params.FixIntersectingWiresMode = FixMode::NotFix;
+        params.FixLoopWiresMode = FixMode::NotFix;
+        params.FixSplitFaceMode = FixMode::NotFix;
+        params.FixSmallAreaWireMode = FixMode::NotFix;
+        params.RemoveSmallAreaFaceMode = FixMode::NotFix;
+        params.FixSelfIntersectionMode = FixMode::NotFix;
+        params.FixSelfIntersectingEdgeMode = FixMode::NotFix;
+        params.FixIntersectingEdgesMode = FixMode::NotFix;
+        params.FixNonAdjacentIntersectingEdgesMode = FixMode::NotFix;
+        params.FixOrientationMode = FixMode::NotFix;
+        params.FixSmallMode = FixMode::NotFix;
+    }
+
+    ShapeProcess::OperationsFlags flags;
+    flags.set(ShapeProcess::Operation::FixShape);
+    reader.SetShapeFixParameters(params);
+    reader.SetShapeProcessFlags(flags);
+}
+
+} // namespace
+#endif
+
+void cafSetShapeFix(STEPCAFControl_Reader& reader, bool quick) {
+#if OCC_VERSION_HEX >= OCC_VERSION_CHECK(7, 8, 0)
+    cafGenericSetShapeFix(reader, DESTEP_Parameters::GetDefaultShapeFixParameters(), quick);
+#else
+    (void)reader; (void)quick;
+#endif
 }
 
 NCollection_Sequence<TDF_Label> cafTransfer(IGESCAFControl_Reader& reader, DocumentPtr doc, TaskProgress* progress) {
