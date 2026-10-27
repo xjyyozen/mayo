@@ -55,6 +55,13 @@
 - S3d（2026-10-27）：分段计时 + 内存峰值 + 拖动帧率，结果见 Viewer3D `docs/perf-s3.md`。
   交互不是瓶颈（单帧最长 12.8 ms）；大 STEP 慢在 OCCT 形状修复（RK3506 的 21.6 s 里约 10.7 s），
   导入期间内存峰值达 2.3 GB；生成显示对象在 UI 线程卡约 1 s。建议 S4 前先做 S3e：精简形状修复 + 显示阶段不卡 UI
+- S3e-1（2026-10-27）：STEP 默认"精简形状修复"（Mayo STEP 读取器新参数 `quickShapeFix`），三角化失败的面 > 1% 时自动用完整修复重导；
+  IGES 保持完整修复。9 个文件回归截图与修改前一致，大 STEP 导入快 9~13%（RK3506 21.6 → 18.7 s），远小于预期；
+  拖动时关闭悬停高亮（H）实测无效果，S3d 的归因有误。加载提速改走"转换结果缓存"（方案 I，S5）。详见 Viewer3D `docs/perf-s3.md`
+
+### S4 待办
+
+- 菜单提供"以完整修复模式重新打开"（精简形状修复下个别文件可能显示异常，让用户手动切到完整修复；底层已有 `MayoSession::ShapeFixMode::Full`）
 
 ## 目录约定
 
@@ -215,3 +222,17 @@
 - **解决**：`hilog -G 16M -t app` 调大缓冲区（重启可能恢复）；Viewer3D 的 `LOGPERF` 同时追加写入沙箱文件
   `files/perf-s3.log`，用 `hdc file recv /data/app/el2/100/base/com.xjy.viewer3d/haps/entry/files/perf-s3.log` 取回。
 - 另外：OCCT 读取器会经 Mayo 的 `TaskProgress::setStep` 报自己的子步骤（如 STEP 的 "Fixing face"），按 Mayo 步骤顺序计数会错，要按标题精确匹配。
+
+### 15. 精简 STEP / IGES 形状修复（S3e-1）
+- **接口**（OCCT 7.8+）：`STEPCAFControl_Reader::SetShapeFixParameters(DE_ShapeFixParameters)` + `SetShapeProcessFlags`。
+  **同一格式的所有读取器共用一个读取 actor**（`STEPControl_Controller` 里的全局对象），参数设一次会一直留着，
+  所以每次转换前都要显式设置（Mayo `io_occ_caf.cpp` 的 `cafSetShapeFix`，完整修复时也要设回默认值）。
+- **不能整个关掉 Fixing face（`FixFaceMode=0`）**：MiniPCIe 有 2 个面三角化失败、包围盒出错，画面只剩一条竖线；RK3506 导入卡死。
+  只关 `FixSameParameterMode` 也一样。能安全关的只有 Fixing face 里的相交 / 小特征 / 线框方向检查，省下约 30%。
+- **IGES 不能精简**：同样的参数下 GearBox.IGS 有近 30% 的面三角化失败、出现杂乱曲线。
+- 三角化失败面的比例不是可靠的判据：坏掉的 MiniPCIe 只有 0.26% 的面失败。新文件显示异常时，先用调试入口 `--ps shapeFix full` 对比。
+- **调试入口（只在 debug 构建生效）**：`hdc shell aa start -b com.xjy.viewer3d -a EntryAbility --ps autoOpen testmodels/<文件> --ps shapeFix full|quick|auto`
+  直接打开沙箱 `files/` 下的文件。C++ 接口 `setShapeFixMode` 用 `#ifndef NDEBUG` 包住，release 的 .so 里没有；
+  ArkTS 的处理代码仍在 release 字节码里，但入口处判断 `BuildProfile.DEBUG`（release 为常量 false），不会生效。
+- 往 debug 应用沙箱放文件：`hdc file send -b com.xjy.viewer3d <本地目录> data/storage/el2/base/haps/entry/files/`
+  （不带 `-b` 时报 permission denied；目标子目录不存在时发单个文件会失败，要发整个目录）。回归脚本：Viewer3D `scripts/s3e_regress.ps1`。
