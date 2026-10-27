@@ -70,6 +70,11 @@
 
 - 菜单提供"以完整修复模式重新打开"（精简形状修复下个别文件可能显示异常，让用户手动切到完整修复；底层已有 `MayoSession::ShapeFixMode::Full`）
 
+### S3.5 待办
+
+- 排查 `systemMaterial` 在自定义组件上无效的原因（最小工程验证、检查系统沉浸光感设置、查 2in1 支持范围），系统更新后复测；
+  通过后把 Viewer3D `GlassPanel.ets` 的 `GLASS_IMPL` 切回 `SYSTEM_MATERIAL`。现用 `backgroundEffect` 替代，详见 Viewer3D `docs/UI_RESEARCH.md` 第 6 节
+
 ## 目录约定
 
 第三方依赖（FreeType、OCCT 等）统一放 `D:\harmony\deps\`：
@@ -106,6 +111,14 @@
 11. **测试用的临时文件（截图、日志、中间产物）一律放 `D:\harmony\Viewer3D\tmp\`**，不要放 C 盘系统临时目录；
     该目录已加入 Viewer3D 的 `.gitignore`，不提交。需要留档的截图 / 数据再复制到 `docs/` 下。
 12. 所有 hdc、uitest、构建命令都要加超时（`timeout N ...`，或后台运行并把输出写入日志）；单个命令超过 3 分钟没有输出就中止并报告，不要无限等待。
+
+## UI 规则
+
+所有界面开发必须遵守 Viewer3D 的 `docs/UI_SPEC.md`：
+
+- 颜色和尺寸（圆角、间距、字号、触控目标等）一律引用资源（`$r('app.color.*')` / `$r('app.float.*')` / `$r('sys.*')`），页面代码里不写死数值（唯一例外 `Color.Transparent`）。
+- 玻璃面板统一用 `GlassPanel`，页面代码不直接调用 `systemMaterial` / `backgroundBlurStyle` / `backgroundEffect` / `backdropBlur`。
+- 图标优先用 HM Symbol；新增颜色 / 尺寸先加资源（深浅色同名），再改 UI_SPEC.md 的表格。
 
 ## 安全规则
 
