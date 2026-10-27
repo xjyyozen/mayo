@@ -103,6 +103,9 @@
    - `D:\harmony\Viewer3D` 的 `main` 分支 → `origin`（https://github.com/xjyyozen/viewer3d.git，私有）
    - push 前按"安全规则"检查：`build-profile.json5`、证书文件、`entry/libs/` 都不在提交内容里
 10. **回复和文档一律使用中文**（代码标识符、命令、原始报错保持原文）。
+11. **测试用的临时文件（截图、日志、中间产物）一律放 `D:\harmony\Viewer3D\tmp\`**，不要放 C 盘系统临时目录；
+    该目录已加入 Viewer3D 的 `.gitignore`，不提交。需要留档的截图 / 数据再复制到 `docs/` 下。
+12. 所有 hdc、uitest、构建命令都要加超时（`timeout N ...`，或后台运行并把输出写入日志）；单个命令超过 3 分钟没有输出就中止并报告，不要无限等待。
 
 ## 安全规则
 
