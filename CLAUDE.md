@@ -115,7 +115,21 @@
 10. **回复和文档一律使用中文**（代码标识符、命令、原始报错保持原文）。
 11. **测试用的临时文件（截图、日志、中间产物）一律放 `D:\harmony\Viewer3D\tmp\`**，不要放 C 盘系统临时目录；
     该目录已加入 Viewer3D 的 `.gitignore`，不提交。需要留档的截图 / 数据再复制到 `docs/` 下。
-12. 所有 hdc、uitest、构建命令都要加超时（`timeout N ...`，或后台运行并把输出写入日志）；单个命令超过 3 分钟没有输出就中止并报告，不要无限等待。
+12. 所有 hdc、uitest、构建命令都要加超时（`timeout N ...`，或后台运行并把输出写入日志）；单个命令超过 3 分钟没有输出就中止并报告，不要无限等待。设备命令、测量和回归脚本另须遵守下面的"命令超时"。
+
+## 命令超时（设备命令、测量和回归脚本必须遵守）
+
+真机是网络设备（`hdc tconn`），会掉线；应用也可能没起来。没有保护的等待循环在设备不可达时每次都要等超时，总共可能卡 10 分钟以上。所以：
+
+1. **每次操作前先确认设备在线**：`hdc list targets` 里有这台设备。不在线就立即报错停止，不要继续等待（重连：`hdc tconn <ip:port>`）。
+2. **`aa start` 之后用 `pidof` 确认应用进程存在**：10 秒内没有进程就报错停止，不能只打印"started"就往下走。
+3. **所有等待循环都设总时限（最多 2 分钟）**：超时就停止，并报告当时的日志（`hilog` 里 VIEWER3D 最近的行）。等待期间每一轮也先检查设备在线、应用进程还在。
+
+实现：
+- PowerShell 脚本（Viewer3D `scripts/*.ps1`）：开头 `. (Join-Path $PSScriptRoot "device_guard.ps1")`，用 `Assert-DeviceOnline` / `Restart-App`（结束 + 启动 + 确认进程）/ `Wait-Until`（总时限 ≤ 120 s，每轮检查设备和进程，超时打日志）；出错时 `exit 2`（2 = 设备 / 应用 / 等待出了问题，1 = 检查项失败）。`-TimeoutSeconds` 参数默认 120，大于 120 按 120 处理。
+- 临时的 bash 命令（Git Bash 里直接调 hdc）：每条 hdc 命令加 `timeout 20`；写循环时同样先检查在线、有总时限；不要把 `aa start` 的结果当成成功。
+- 后台命令（`run_in_background`）也一样：不能无限等待。
+- 给脚本传文件列表参数时用 `powershell -Command "& scripts\x.ps1 -Files a,b"`；`-File x.ps1 -Files a,b` 会把 `a,b` 当成一个字符串。
 
 ## UI 规则
 
@@ -173,7 +187,7 @@
 ### 6. Git Bash 下 `hdc file recv` 路径被改写（S2a）
 - **原始报错**：`[Fail]Error opening file: no such file or directory, path:C:/Program Files/Git/data/local/tmp/v1.jpeg`
 - **原因**：Git Bash 把 `/data/...` 这种以 `/` 开头的参数当成 Windows 路径改写了。
-- **解决**：`hdc file send/recv` 改在 PowerShell 里执行。
+- **解决**：`hdc file send/recv` 改在 PowerShell 里执行；或在 Git Bash 里设 `MSYS_NO_PATHCONV=1`，本地路径用 `cygpath -w` 转成 Windows 反斜杠路径（正斜杠路径会被 hdc 当成相对路径）。
 - 设备上截图：`hdc -t <设备> shell "snapshot_display -f /data/local/tmp/x.jpeg"`；
   模拟点击/拖动（测最大化、改窗口大小）：`uitest uiInput click x y`、`uitest uiInput drag x1 y1 x2 y2 速度`，坐标是屏幕物理像素。
 
