@@ -72,6 +72,8 @@
   距离（最小距离，两侧都是圆时补圆心距离）、直径 / 半径、角度、长度、面积、点坐标；结果同时出 3D 标注（琥珀色 `measure_annotation`）和面板列表，可保留多条 / 单删 / 全部清除；
   进入 / 切换 / 退出按帧分批激活选择模式（每帧 12 ms，C300 首轮 6.3 s、单步最坏 79.6 ms）；与剖切共存（只测未剖掉的部分）。回归 `scripts/measure_check.ps1`（22 项，±0.05），已并入 `regress.ps1`；
   截图 `docs/screenshots/s4e/`。详见 Viewer3D `docs/UI_SPEC.md` 第 15 节、`docs/perf-s4.md` 第 8 节
+- S4e-1（2026-10-29）：修复测量面板出结果后被"全部清除"按钮撑满屏幕（按钮在 Column 里的 `layoutWeight(1)` 被当作纵向占满，改为整行 `width('100%')`）；
+  `measure_check.ps1` 增加面板高度布局检查（23 项），重拍 S4e 截图
 
 ### S4 待办
 
