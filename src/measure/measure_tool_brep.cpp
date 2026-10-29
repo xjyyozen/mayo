@@ -59,6 +59,8 @@ enum class ErrorCode {
     Unknown,
     NotVertex,
     NotCircularEdge,
+    NotCircularFace,
+    NotPlanarFace,
     NotBRepShape,
     NotGeometricOrPolygonEdge,
     NotGeometricOrTriangulationFace,
@@ -82,6 +84,10 @@ public:
             return textIdTr("Entity must be a vertex");
         case ErrorCode::NotCircularEdge:
             return textIdTr("Entity must be a circular edge");
+        case ErrorCode::NotCircularFace:
+            return textIdTr("Entity must be a cylindrical face");
+        case ErrorCode::NotPlanarFace:
+            return textIdTr("Entity must be a planar face");
         case ErrorCode::NotBRepShape:
             return textIdTr("Entity must be a shape(BREP)");
         case ErrorCode::NotGeometricOrPolygonEdge:
@@ -142,8 +148,21 @@ gp_Pnt computeShapeCenter(const TopoDS_Shape& shape)
 
     GProp_GProps shapeProps;
     if (shapeType == TopAbs_FACE) {
-        // TODO Consider case where the face is cylindrical
         BRepGProp::SurfaceProperties(shape, shapeProps);
+        if (BRepUtils::isGeometric(TopoDS::Face(shape))) {
+            const BRepAdaptor_Surface surface(TopoDS::Face(shape));
+            if (surface.GetType() == GeomAbs_Cylinder) {
+                // Center of a cylindrical face is the projection of its center of mass
+                // onto the cylinder axis
+                throwErrorIf<ErrorCode::CenterFailure>(
+                    shapeProps.Mass() < Precision::Confusion());
+                const gp_Cylinder cylinder = surface.Cylinder();
+                const gp_Lin axis(
+                    cylinder.Location(), cylinder.Position().Direction());
+                const gp_Pnt centerOfMass = shapeProps.CentreOfMass();
+                return ElCLib::Value(ElCLib::Parameter(axis, centerOfMass), axis);
+            }
+        }
     }
     else if (shapeType == TopAbs_WIRE) {
         BRepGProp::LinearProperties(shape, shapeProps);
@@ -163,6 +182,75 @@ gp_Pnt computeShapeCenter(const TopoDS_Shape& shape)
 
     throwErrorIf<ErrorCode::CenterFailure>(shapeProps.Mass() < Precision::Confusion());
     return shapeProps.CentreOfMass();
+}
+
+// Computes the angle between two planar faces
+// The angle is measured at the intersection line of the planes holding the faces, and oriented
+// towards the center of mass of each face
+MeasureAngle brepAnglePlanes(const TopoDS_Face& face1, const TopoDS_Face& face2)
+{
+    throwErrorIf<ErrorCode::NotGeometricOrTriangulationFace>(
+        !BRepUtils::isGeometric(face1) || !BRepUtils::isGeometric(face2));
+    const BRepAdaptor_Surface surf1(face1);
+    const BRepAdaptor_Surface surf2(face2);
+    throwErrorIf<ErrorCode::NotPlanarFace>(surf1.GetType() != GeomAbs_Plane);
+    throwErrorIf<ErrorCode::NotPlanarFace>(surf2.GetType() != GeomAbs_Plane);
+    const gp_Pln pln1 = surf1.Plane();
+    const gp_Pln pln2 = surf2.Plane();
+
+    // Outward normals of the faces(affected by face orientation)
+    gp_Dir normal1 = pln1.Axis().Direction();
+    gp_Dir normal2 = pln2.Axis().Direction();
+    if (face1.Orientation() == TopAbs_REVERSED)
+        normal1.Reverse();
+    if (face2.Orientation() == TopAbs_REVERSED)
+        normal2.Reverse();
+    throwErrorIf<ErrorCode::ParallelEdges>(normal1.IsParallel(normal2, Precision::Angular()));
+
+    // Centers of mass of the input faces
+    GProp_GProps props1;
+    GProp_GProps props2;
+    BRepGProp::SurfaceProperties(face1, props1);
+    BRepGProp::SurfaceProperties(face2, props2);
+    throwErrorIf<ErrorCode::CenterFailure>(
+        props1.Mass() < Precision::Confusion() || props2.Mass() < Precision::Confusion());
+    const gp_Pnt center1 = props1.CentreOfMass();
+    const gp_Pnt center2 = props2.CentreOfMass();
+
+    // Intersection line of the two planes
+    const double dotNormals = normal1.Dot(normal2);
+    const double c1 = normal1.Dot(pln1.Location().XYZ());
+    const double c2 = normal2.Dot(pln2.Location().XYZ());
+    const double denom = 1. - dotNormals * dotNormals;
+    const gp_Pnt pntOnLine(
+        ((c1 - c2 * dotNormals) * normal1.XYZ()
+         + (c2 - c1 * dotNormals) * normal2.XYZ()) / denom
+    );
+    const gp_Dir lineDir(normal1.XYZ().Crossed(normal2.XYZ()));
+    const gp_Lin line(pntOnLine, lineDir);
+
+    // Center the angle representation on the midpoint of the face centers
+    const gp_Pnt pntMid((center1.XYZ() + center2.XYZ()) / 2.);
+    const gp_Pnt pntCenter = ElCLib::Value(ElCLib::Parameter(line, pntMid), line);
+
+    // Rays lying in each plane, perpendicular to the intersection line, towards the face centers
+    const gp_Vec vecLine(lineDir.XYZ());
+    gp_Vec vec1(pntCenter, center1);
+    gp_Vec vec2(pntCenter, center2);
+    vec1.Subtract(vecLine.Multiplied(vec1.Dot(vecLine)));
+    vec2.Subtract(vecLine.Multiplied(vec2.Dot(vecLine)));
+    throwErrorIf<ErrorCode::Unknown>(
+        vec1.Magnitude() < Precision::Confusion()
+        || vec2.Magnitude() < Precision::Confusion());
+
+    // Build the result
+    const double radius = 0.4 * std::min(vec1.Magnitude(), vec2.Magnitude());
+    MeasureAngle angleResult;
+    angleResult.pntCenter = pntCenter;
+    angleResult.pnt1 = pntCenter.Translated(vec1.Normalized().Multiplied(radius));
+    angleResult.pnt2 = pntCenter.Translated(vec2.Normalized().Multiplied(radius));
+    angleResult.value = vec1.Angle(vec2) * Quantity_Radian;
+    return angleResult;
 }
 
 // Defines the result of fittedPlane() function
@@ -357,10 +445,22 @@ gsl::span<const GraphicsObjectSelectionMode> MeasureToolBRep::selectionModes(Mea
         return modes;
     }
     case MeasureType::CircleCenter:
-    case MeasureType::CircleDiameter:
-    case MeasureType::Length:
-    case MeasureType::Angle: {
+    case MeasureType::CircleDiameter: {
+        static const GraphicsObjectSelectionMode modes[] = {
+            AIS_Shape::SelectionMode(TopAbs_EDGE),
+            AIS_Shape::SelectionMode(TopAbs_FACE)
+        };
+        return modes;
+    }
+    case MeasureType::Length: {
         static const GraphicsObjectSelectionMode modes[] = { AIS_Shape::SelectionMode(TopAbs_EDGE) };
+        return modes;
+    }
+    case MeasureType::Angle: {
+        static const GraphicsObjectSelectionMode modes[] = {
+            AIS_Shape::SelectionMode(TopAbs_EDGE),
+            AIS_Shape::SelectionMode(TopAbs_FACE)
+        };
         return modes;
     }
     case MeasureType::MinDistance:
@@ -565,12 +665,41 @@ MeasureCircle MeasureToolBRep::brepCircleFromPolygonEdge(const TopoDS_Edge& edge
 
 MeasureCircle MeasureToolBRep::brepCircle(const TopoDS_Shape& shape)
 {
-    throwErrorIf<ErrorCode::NotCircularEdge>(shape.IsNull() || shape.ShapeType() != TopAbs_EDGE);
+    throwErrorIf<ErrorCode::NotCircularEdge>(shape.IsNull());
+    if (shape.ShapeType() == TopAbs_FACE)
+        return MeasureToolBRep::brepCircleFromCylindricalFace(TopoDS::Face(shape));
+    throwErrorIf<ErrorCode::NotCircularEdge>(shape.ShapeType() != TopAbs_EDGE);
     const TopoDS_Edge& edge = TopoDS::Edge(shape);
     if (BRepUtils::isGeometric(edge))
         return MeasureToolBRep::brepCircleFromGeometricEdge(edge);
     else
         return MeasureToolBRep::brepCircleFromPolygonEdge(edge);
+}
+
+MeasureCircle MeasureToolBRep::brepCircleFromCylindricalFace(const TopoDS_Face& face)
+{
+    throwErrorIf<ErrorCode::NotGeometricOrTriangulationFace>(!BRepUtils::isGeometric(face));
+    const BRepAdaptor_Surface surface(face);
+    throwErrorIf<ErrorCode::NotCircularFace>(surface.GetType() != GeomAbs_Cylinder);
+    const gp_Cylinder cylinder = surface.Cylinder();
+    const gp_Lin axis(cylinder.Location(), cylinder.Position().Direction());
+
+    // Anchor point on the face(middle point of the surface parametric domain)
+    const gp_Pnt pntAnchor = surface.Value(
+        (surface.FirstUParameter() + surface.LastUParameter()) / 2.,
+        (surface.FirstVParameter() + surface.LastVParameter()) / 2.
+    );
+
+    // Circle center: projection of the anchor point onto the cylinder axis
+    // Note: the anchor point lies on the cylinder surface so it also belongs to the resulting
+    // circle(same 'height' along the axis, distance to axis equals the cylinder radius)
+    const gp_Pnt center = ElCLib::Value(ElCLib::Parameter(axis, pntAnchor), axis);
+
+    MeasureCircle result;
+    result.value = gp_Circ{ gp_Ax2{center, cylinder.Position().Direction()}, cylinder.Radius() };
+    result.pntAnchor = pntAnchor;
+    result.isArc = false;
+    return result;
 }
 
 MeasureDistance MeasureToolBRep::brepMinDistance(
@@ -619,10 +748,17 @@ MeasureDistance MeasureToolBRep::brepCenterDistance(
 
 MeasureAngle MeasureToolBRep::brepAngle(const TopoDS_Shape& shape1, const TopoDS_Shape& shape2)
 {
-    MeasureAngle angleResult;
-
     throwErrorIf<ErrorCode::NotBRepShape>(shape1.IsNull());
     throwErrorIf<ErrorCode::NotBRepShape>(shape2.IsNull());
+
+    // Two planar faces: angle between the faces
+    if (shape1.ShapeType() == TopAbs_FACE && shape2.ShapeType() == TopAbs_FACE)
+        return brepAnglePlanes(TopoDS::Face(shape1), TopoDS::Face(shape2));
+
+    throwErrorIf<ErrorCode::NotAllEdges>(
+        shape1.ShapeType() != TopAbs_EDGE || shape2.ShapeType() != TopAbs_EDGE);
+
+    MeasureAngle angleResult;
 
     TopoDS_Edge edge1 = tryGetLinearEdge(TopoDS::Edge(shape1));
     TopoDS_Edge edge2 = tryGetLinearEdge(TopoDS::Edge(shape2));

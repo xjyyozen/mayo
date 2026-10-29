@@ -264,7 +264,7 @@ void MeasureDisplayCircleDiameter::update(const MeasureDisplayConfig& config)
         MeasureDisplayI18N::textIdTr("Diameter: {0}{1}"), strDiameter, trDiameter.strUnit
     ));
 
-    BaseMeasureDisplay::setTextLabel(m_gfxDiameterText, fmt::format(MeasureDisplayI18N::textIdTr("Ø{0}"), strDiameter));
+    BaseMeasureDisplay::setTextLabel(m_gfxDiameterText, fmt::format(MeasureDisplayI18N::textIdTr("Ø{0}{1}"), strDiameter, trDiameter.strUnit));
     BaseMeasureDisplay::adaptScale(m_gfxDiameterText, config);
 }
 
@@ -334,7 +334,7 @@ void MeasureDisplayDistance::update(const MeasureDisplayConfig& config)
         ));
     }
 
-    BaseMeasureDisplay::setTextLabel(m_gfxDistText, strLength);
+    BaseMeasureDisplay::setTextLabel(m_gfxDistText, fmt::format("{0}{1}", strLength, trLength.strUnit));
     BaseMeasureDisplay::adaptScale(m_gfxDistText, config);
 }
 
@@ -401,7 +401,7 @@ void MeasureDisplayAngle::update(const MeasureDisplayConfig& config)
         strAngle,
         trAngle.strUnit
     ));
-    BaseMeasureDisplay::setTextLabel(m_gfxAngleText, strAngle);
+    BaseMeasureDisplay::setTextLabel(m_gfxAngleText, fmt::format("{0}{1}", strAngle, trAngle.strUnit));
     BaseMeasureDisplay::adaptScale(m_gfxAngleText, config);
 }
 
@@ -451,7 +451,7 @@ void MeasureDisplayLength::update(const MeasureDisplayConfig& config)
         strLength,
         trLength.strUnit
     ));
-    BaseMeasureDisplay::setTextLabel(m_gfxLenText, strLength);
+    BaseMeasureDisplay::setTextLabel(m_gfxLenText, fmt::format("{0}{1}", strLength, trLength.strUnit));
     BaseMeasureDisplay::adaptScale(m_gfxLenText, config);
 }
 
@@ -488,7 +488,7 @@ void MeasureDisplayArea::update(const MeasureDisplayConfig& config)
         strArea,
         trArea.strUnit
     ));
-    BaseMeasureDisplay::setTextLabel(m_gfxAreaText, strArea);
+    BaseMeasureDisplay::setTextLabel(m_gfxAreaText, fmt::format("{0}{1}", strArea, trArea.strUnit));
     BaseMeasureDisplay::adaptScale(m_gfxAreaText, config);
 }
 

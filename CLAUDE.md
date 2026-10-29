@@ -67,6 +67,11 @@
   GlassPanel 改用 `backgroundEffect`（`GLASS_IMPL` 开关可切回 `systemMaterial`）；C300 拖动旋转有 / 无面板开销在噪声内（见 Viewer3D `docs/perf-s3.md` "S3.5 材质开销"）。详见 `docs/UI_SPEC.md`、`docs/UI_RESEARCH.md` 第 6 节
 - S4a（2026-10-27）：应用骨架。应用名"观棱"（英文 Guanleng）+ 占位图标；`@Env` 断点（sm < 600 ≤ md < 840 ≤ lg）切换布局：文件胶囊、右上角按钮组、模型树面板 / 把手、属性卡片位置、Dock（6 / 5 个按钮）、
   sm 底部上滑面板（可拖动吸附）、空状态 / 加载 / 错误卡片；深色 ViewCube 改中性灰；窗口从最大化缩到最窄布局正确；6 张截图在 `docs/screenshots/s4a/`；pick_check 回归通过。详见 `docs/UI_SPEC.md` 第 10 节
+- S4b–S4d（2026-10-27 ~ 10-28）：模型树、视图工具 / 属性卡片 / 隔离 / 右键菜单、剖切（裁剪面 + 截面封口）；各自带回归脚本与截图。详见 Viewer3D `docs/UI_SPEC.md` 第 12–14 节、`docs/perf-s4.md` 第 6–7 节
+- S4e（2026-10-29）：测量。Dock"测量"打开子对象级拾取（点 / 边 / 面），复用 Mayo `MeasureToolBRep` + `BaseMeasureDisplay`（不重写算法）：
+  距离（最小距离，两侧都是圆时补圆心距离）、直径 / 半径、角度、长度、面积、点坐标；结果同时出 3D 标注（琥珀色 `measure_annotation`）和面板列表，可保留多条 / 单删 / 全部清除；
+  进入 / 切换 / 退出按帧分批激活选择模式（每帧 12 ms，C300 首轮 6.3 s、单步最坏 79.6 ms）；与剖切共存（只测未剖掉的部分）。回归 `scripts/measure_check.ps1`（22 项，±0.05），已并入 `regress.ps1`；
+  截图 `docs/screenshots/s4e/`。详见 Viewer3D `docs/UI_SPEC.md` 第 15 节、`docs/perf-s4.md` 第 8 节
 
 ### S4 待办
 
@@ -288,3 +293,8 @@
   （`AddObjectDisableSelectionMode`）或激活一个对象的选择。延迟显示期间 `graphicsBoundingBox()` 不全，FitAll 要用自己算的包围盒。
 - 触控拖动时绘制明显比没有输入时快（同一场景 7 ms 对 11 ms），推测是系统 touch boost 提频；对比帧耗时要注意输入方式。
 
+
+### 17. 测量：OCCT 的面优先拾取与"适配到选中"（S4e）
+- **现象**：按像素点选一条边，命中的却是面（角度测量报 `All entities must be edges`）；换视图 / 适配之后所有取点全部失准。
+- **原因**：① 同一像素同时落在面和它的边界边上时，OCCT 选择器**给面**；只有轮廓边（背面是"边缘朝向相机"的面，例如侧视图的上下轮廓边、俯视的上盖前后边、右侧竖边）能稳定命中边。② `FitView` / `SetStandardView` 在 `NbSelected() > 0` 时按选中对象适配，而测量已拾取的第一个子形状也是一个选中 → 换视图时相机放大到那个边 / 面，后续取点全部偏掉（表现为测量全部失败或算出错的实体）。
+- **解决**：`FitView` / `SetStandardView` 在测量态（`measureKind_ != MeasureDisabled`）忽略子形状选中、按整个模型适配；回归脚本只用轮廓边 / 面内部取点，并且每次拾取后校验 native 打的 `measure entity: type=vertex|edge|face`（`scripts/measure_check.ps1`）。

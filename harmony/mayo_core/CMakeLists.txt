@@ -86,6 +86,7 @@ file(
     ${MAYO_SRC_DIR}/base/*.cpp
     ${MAYO_SRC_DIR}/graphics/*.cpp
     ${MAYO_SRC_DIR}/gui/*.cpp
+    ${MAYO_SRC_DIR}/measure/*.cpp
     ${MAYO_SRC_DIR}/3rdparty/fmt/src/format.cc
 )
 

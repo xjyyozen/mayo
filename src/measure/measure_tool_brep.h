@@ -8,6 +8,7 @@
 #include "measure_tool.h"
 
 class TopoDS_Edge;
+class TopoDS_Face;
 class TopoDS_Shape;
 
 namespace Mayo {
@@ -40,6 +41,7 @@ public:
 private:
     static MeasureCircle brepCircleFromGeometricEdge(const TopoDS_Edge& edge);
     static MeasureCircle brepCircleFromPolygonEdge(const TopoDS_Edge& edge);
+    static MeasureCircle brepCircleFromCylindricalFace(const TopoDS_Face& face);
 };
 
 } // namespace Mayo
